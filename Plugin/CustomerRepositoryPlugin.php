@@ -42,10 +42,13 @@ class CustomerRepositoryPlugin
         }
 
         foreach ($items as $customer) {
-            $type = 'individual';
+            $type = 'individual_user';
 
             if ($b2bEnabled && $companyManagement->getByCustomerId($customer->getId())) {
-                $type = 'company';
+                $type = 'company_user';
+            }
+            elseif ($this->hasCompanyAttribute($customer)) {
+                $type = 'company_user';
             }
             elseif ($customer->getDefaultBilling()) {
                 try {
@@ -54,7 +57,7 @@ class CustomerRepositoryPlugin
                         ->getById($customer->getDefaultBilling());
 
                     if ($address && $address->getCompany()) {
-                        $type = 'company';
+                        $type = 'company_user';
                     }
                 } catch (\Exception $e) {
                     $this->logger->info($e->getMessage());
@@ -68,5 +71,21 @@ class CustomerRepositoryPlugin
         }
 
         return $searchResults;
+    }
+
+    /**
+     * @param CustomerInterface $customer
+     * @return bool
+     */
+    private function hasCompanyAttribute(CustomerInterface $customer): bool
+    {
+        foreach ($customer->getCustomAttributes() as $attribute) {
+            if (strtolower($attribute->getAttributeCode()) === 'company') {
+                $value = trim($attribute->getValue());
+                return !empty($value);
+            }
+        }
+
+        return false;
     }
 }
