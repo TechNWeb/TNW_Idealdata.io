@@ -1,0 +1,81 @@
+.idealdata-config-title {
+    clear: both;
+    color: #303030;
+    cursor: pointer;
+    display: block;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: .025em;
+    padding: 1.9rem 2.8rem 1.9rem 0;
+    position: relative;
+    text-decoration: none;
+    transition: color .15s linear;
+}
+
+.idealdata-config-title::after {
+    content: '\e616';
+    font-family: 'Admin Icons';
+    font-size: 1.8rem;
+    position: absolute;
+    right: 1.3rem;
+    top: 1.8rem;
+    transition: transform 0.3s ease;
+    color: #303030;
+    font-weight: 400;
+}
+.idealdata-config-title p {
+    margin: 0;
+}
+.idealdata-collapsed .idealdata-config-title::after {
+    transform: rotate(-180deg);
+}
+.idealdata-config-content {
+    padding: 0 2rem;
+    display: block;
+    background: #fff;
+}
+.idealdata-collapsed .idealdata-config-content {
+    display: none;
+}
+.idealdata-collapsed .idealdata-config-title {
+    border-bottom: 1px solid #cccccc;
+}
+.idealdata-custom-block h1 {
+    font-size: 20px;
+    margin-top: 0;
+}
+.idealdata-secondary-btn {
+    margin-left: 10px;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.idealdata-custom-block ul {
+    list-style: none;
+    padding-left: 20px;
+
+}
+.idealdata-custom-block li {
+    position: relative;
+    padding-left: 30px;
+    line-height: 1.6;
+}
+.idealdata-custom-block li::before {
+    content: "✔";
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 14px;
+    height: 14px;
+    background-color: #28a745; /* зелёный квадрат */
+    color: #fff;
+    line-height: 14px;
+    font-family: Arial, sans-serif;
+}
+.idealdata-custom-block .btn-class p {
+    display: inline;
+    margin-left: 10px;
+    color: #adadad;
+}

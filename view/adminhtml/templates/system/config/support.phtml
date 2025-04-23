@@ -1,0 +1,18 @@
+<div class="idealdata-config-fieldset idealdata-collapsed" id="idealdata-support-block">
+    <div class="idealdata-config-title" onclick="toggleIdealdataSupport()">Ongoing Support</div>
+    <div class="idealdata-config-content">
+        <div class="idealdata-support">
+            <p>Running into sync issues and need assistance?</p>
+            <button onclick="window.open('https://support.idealdata.io','_blank');" class="action-default scalable idealdata-support">
+                Open a ticket
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleIdealdataSupport() {
+        const el = document.getElementById('idealdata-support-block');
+        el.classList.toggle('idealdata-collapsed');
+    }
+</script>

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="idealdata_tab" translate="label" sortOrder="100">
+            <label>IDEALDATA.IO</label>
+        </tab>
+        <section id="integration_section" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+            <label>Integration</label>
+            <tab>idealdata_tab</tab>
+            <resource>TNW_Idealdata::config</resource>
+            <group id="introduction_group" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\Intro</frontend_model>
+            </group>
+            <group id="onboarding_group" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\Onboarding</frontend_model>
+            </group>
+            <group id="support_group" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\Support</frontend_model>
+            </group>
+        </section>
+    </system>
+</config>
