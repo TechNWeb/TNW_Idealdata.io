@@ -79,3 +79,16 @@
     margin-left: 10px;
     color: #adadad;
 }
+
+.config-nav .ideadata-tab .admin__page-nav-title:before {
+    content: '';
+    background: url('../images/idealdata-logo.png') no-repeat 0 0;background-size: contain;
+    display: block;
+    width: 30px;
+    height: 30px;
+    position: absolute;
+    top: 11px;
+}
+.config-nav .ideadata-tab .admin__page-nav-title strong {
+    margin-left: 40px;
+}
