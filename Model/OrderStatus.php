@@ -7,29 +7,23 @@ use TNW\Idealdata\Api\Data\OrderStatusInterface;
 class OrderStatus implements OrderStatusInterface
 {
     public function __construct(
-        private readonly string $statusCode,
-        private readonly string $statusLabel,
-        private readonly string $stateCode,
-        private readonly string $stateLabel
+        private readonly string $status,
+        private readonly string $label,
+        private readonly string $state
     ) {}
 
-    public function getStatusCode(): string
+    public function getStatus(): string
     {
-        return $this->statusCode;
+        return $this->status;
     }
 
-    public function getStatusLabel(): string
+    public function getLabel(): string
     {
-        return $this->statusLabel;
+        return $this->label;
     }
 
-    public function getStateCode(): string
+    public function getState(): string
     {
-        return $this->stateCode;
-    }
-
-    public function getStateLabel(): string
-    {
-        return $this->stateLabel;
+        return $this->state;
     }
 }

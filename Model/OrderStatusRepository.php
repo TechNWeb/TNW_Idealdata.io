@@ -22,21 +22,18 @@ class OrderStatusRepository implements OrderStatusRepositoryInterface
     public function getList(): array
     {
         $result = [];
-        $states = $this->orderConfig->getStates();
 
         $collection = $this->statusCollectionFactory->create()->joinStates();
 
         foreach ($collection as $item) {
-            $statusCode = $item->getStatus();
-            $statusLabel = $item->getLabel();
-            $stateCode = (string) $item->getState();
-            $stateLabel = $states[$stateCode] ?? $stateCode;
+            $status = $item->getStatus();
+            $label = $item->getLabel();
+            $state = (string) $item->getState();
 
             $result[] = new OrderStatus(
-                $statusCode,
-                $statusLabel,
-                $stateCode,
-                (string) $stateLabel
+                $status,
+                $label,
+                $state,
             );
         }
 

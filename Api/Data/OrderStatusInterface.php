@@ -12,26 +12,19 @@ interface OrderStatusInterface
      *
      * @return string
      */
-    public function getStatusCode(): string;
+    public function getStatus(): string;
 
     /**
      * Get order status label
      *
      * @return string
      */
-    public function getStatusLabel(): string;
+    public function getLabel(): string;
 
     /**
      * Get order state code
      *
      * @return string
      */
-    public function getStateCode(): string;
-
-    /**
-     * Get order state label
-     *
-     * @return string
-     */
-    public function getStateLabel(): string;
+    public function getState(): string;
 }
