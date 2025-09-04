@@ -2,7 +2,7 @@
   "name": "tnw/module-idealdata",
   "description": "Idealdata module for Magento 2",
   "type": "magento2-module",
-  "version": "0.3",
+  "version": "0.4",
   "license": "OSL-3.0",
   "require": {
     "magento/framework": ">=103.0.6",
