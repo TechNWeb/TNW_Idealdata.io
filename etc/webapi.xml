@@ -6,4 +6,26 @@
             <resource ref="Magento_Sales::sales"/>
         </resources>
     </route>
+
+    <route url="/V1/idealdata/address/:id" method="GET">
+        <service class="TNW\Idealdata\Api\IdealdataAddressServiceInterface" method="getAddress"/>
+        <resources>
+            <resource ref="Magento_Customer::address"/>
+        </resources>
+    </route>
+
+    <route url="/V1/idealdata/addresses/updated-since/:minutes" method="GET">
+        <service class="TNW\Idealdata\Api\IdealdataAddressServiceInterface" method="getUpdatedAddresses"/>
+        <resources>
+            <resource ref="Magento_Customer::address" />
+        </resources>
+    </route>
+
+    <route url="/V1/idealdata/addresses/by-customer/:customerId" method="GET">
+        <service class="TNW\Idealdata\Api\IdealdataAddressServiceInterface" method="getAddressesByCustomerId"/>
+        <resources>
+            <resource ref="Magento_Customer::address" />
+        </resources>
+    </route>
+
 </routes>
