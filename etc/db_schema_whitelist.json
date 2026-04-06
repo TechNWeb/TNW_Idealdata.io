@@ -1,0 +1,40 @@
+{
+    "tnw_quote_payment_transaction": {
+        "column": {
+            "entity_id": true,
+            "quote_id": true,
+            "store_id": true,
+            "transaction_id": true,
+            "status": true,
+            "decline_code": true,
+            "decline_reason": true,
+            "decline_category": true,
+            "gateway_message": true,
+            "payment_method": true,
+            "card_type": true,
+            "card_last_four": true,
+            "card_expiry_month": true,
+            "card_expiry_year": true,
+            "amount": true,
+            "currency": true,
+            "customer_id": true,
+            "customer_email": true,
+            "is_guest": true,
+            "attempt_number": true,
+            "ip_address": true,
+            "user_agent": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        },
+        "index": {
+            "TNW_QPT_QUOTE_ID": true,
+            "TNW_QPT_UPDATED_AT": true,
+            "TNW_QPT_UPDATED_AT_STATUS": true,
+            "TNW_QPT_CUSTOMER_EMAIL": true,
+            "TNW_QPT_STORE_UPDATED": true
+        }
+    }
+}

@@ -4,4 +4,36 @@
     <extension_attributes for="Magento\Customer\Api\Data\CustomerInterface">
         <attribute code="customer_type" type="string"/>
     </extension_attributes>
+
+    <!-- Issue #1: manage_stock on Product -->
+    <extension_attributes for="Magento\Catalog\Api\Data\ProductInterface">
+        <attribute code="manage_stock" type="int"/>
+    </extension_attributes>
+
+    <!-- Issue #5a: custom_attributes on Order -->
+    <extension_attributes for="Magento\Sales\Api\Data\OrderInterface">
+        <attribute code="custom_attributes" type="Magento\Framework\Api\AttributeInterface[]"/>
+    </extension_attributes>
+
+    <!-- Issue #5b: extra fields on Order Item -->
+    <extension_attributes for="Magento\Sales\Api\Data\OrderItemInterface">
+        <attribute code="product_type" type="string"/>
+        <attribute code="parent_item_id" type="int"/>
+        <attribute code="buy_request" type="string"/>
+    </extension_attributes>
+
+    <!-- Issue #5c: extra fields on Cart (Quote) -->
+    <extension_attributes for="Magento\Quote\Api\Data\CartInterface">
+        <attribute code="coupon_code" type="string"/>
+        <attribute code="applied_rule_ids" type="string"/>
+        <attribute code="customer_is_guest" type="int"/>
+    </extension_attributes>
+
+    <!-- Issue #5d: extra fields on Cart Item -->
+    <extension_attributes for="Magento\Quote\Api\Data\CartItemInterface">
+        <attribute code="parent_item_id" type="int"/>
+        <attribute code="product_type" type="string"/>
+        <attribute code="row_total" type="float"/>
+        <attribute code="row_total_with_discount" type="float"/>
+    </extension_attributes>
 </config>

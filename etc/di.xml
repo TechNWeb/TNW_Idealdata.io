@@ -3,6 +3,40 @@
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
     <type name="Magento\Customer\Api\CustomerRepositoryInterface">
         <plugin name="tnw_idealdata_customertype_plugin" type="TNW\Idealdata\Plugin\CustomerRepositoryPlugin"/>
+        <plugin name="tnw_idealdata_address_updated_at_filter" type="TNW\Idealdata\Plugin\Customer\AddressUpdatedAtFilterPlugin" sortOrder="20"/>
     </type>
+
+    <!-- Issue #1: manage_stock extension attribute -->
+    <type name="Magento\Catalog\Model\Product">
+        <plugin name="tnw_idealdata_add_manage_stock" type="TNW\Idealdata\Plugin\Product\AddManageStockPlugin" sortOrder="10"/>
+    </type>
+
+    <!-- Issue #2: stock_item in product list -->
+    <type name="Magento\Catalog\Api\ProductRepositoryInterface">
+        <plugin name="tnw_idealdata_stock_item" type="TNW\Idealdata\Plugin\Product\StockItemPlugin" sortOrder="10"/>
+        <plugin name="tnw_idealdata_stock_updated_at_filter" type="TNW\Idealdata\Plugin\Product\StockUpdatedAtFilterPlugin" sortOrder="20"/>
+    </type>
+
+    <!-- Issue #5a/5b: Order attributes -->
+    <type name="Magento\Sales\Api\OrderRepositoryInterface">
+        <plugin name="tnw_idealdata_order_custom_attributes" type="TNW\Idealdata\Plugin\Order\AddCustomAttributesPlugin" sortOrder="10"/>
+        <plugin name="tnw_idealdata_order_item_attributes" type="TNW\Idealdata\Plugin\Order\AddOrderItemAttributesPlugin" sortOrder="20"/>
+    </type>
+
+    <!-- Issue #5c/5d: Cart attributes -->
+    <type name="Magento\Quote\Api\CartRepositoryInterface">
+        <plugin name="tnw_idealdata_cart_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartAttributesPlugin" sortOrder="10"/>
+        <plugin name="tnw_idealdata_cart_item_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartItemAttributesPlugin" sortOrder="20"/>
+    </type>
+
+    <!-- Preferences: existing -->
     <preference for="TNW\Idealdata\Api\OrderStatusRepositoryInterface" type="TNW\Idealdata\Model\OrderStatusRepository"/>
+
+    <!-- Preferences: Issue #4 -->
+    <preference for="TNW\Idealdata\Api\AbandonedCartRepositoryInterface" type="TNW\Idealdata\Model\AbandonedCartRepository"/>
+    <preference for="TNW\Idealdata\Api\Data\AbandonedCartSearchResultsInterface" type="TNW\Idealdata\Model\Data\AbandonedCartSearchResults"/>
+
+    <!-- Preferences: Issue #7c -->
+    <preference for="TNW\Idealdata\Api\FailedTransactionRepositoryInterface" type="TNW\Idealdata\Model\FailedTransactionRepository"/>
+    <preference for="TNW\Idealdata\Api\Data\FailedTransactionSearchResultsInterface" type="TNW\Idealdata\Model\Data\FailedTransactionSearchResults"/>
 </config>
