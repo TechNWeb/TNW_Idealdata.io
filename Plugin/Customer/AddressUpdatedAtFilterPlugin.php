@@ -23,7 +23,6 @@ class AddressUpdatedAtFilterPlugin
 
     public function __construct(
         private readonly ResourceConnection $resourceConnection,
-        private readonly CustomerRepositoryInterface $customerRepository,
         private readonly LoggerInterface $logger
     ) {
     }

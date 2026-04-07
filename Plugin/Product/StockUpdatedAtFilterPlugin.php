@@ -23,7 +23,6 @@ class StockUpdatedAtFilterPlugin
 
     public function __construct(
         private readonly ResourceConnection $resourceConnection,
-        private readonly ProductRepositoryInterface $productRepository,
         private readonly LoggerInterface $logger
     ) {
     }
