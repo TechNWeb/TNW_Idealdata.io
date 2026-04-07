@@ -71,6 +71,10 @@ class AddCartItemAttributesPlugin
                 $extensionAttributes = $this->itemExtensionFactory->create();
             }
 
+            if (method_exists($item, 'getProductId')) {
+                $extensionAttributes->setProductId((int) $item->getProductId());
+            }
+
             $extensionAttributes->setParentItemId(
                 $item->getParentItemId() ? (int) $item->getParentItemId() : null
             );

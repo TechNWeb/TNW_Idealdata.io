@@ -17,26 +17,15 @@
         <plugin name="tnw_idealdata_stock_updated_at_filter" type="TNW\Idealdata\Plugin\Product\StockUpdatedAtFilterPlugin" sortOrder="20"/>
     </type>
 
-    <!-- Issue #5a/5b: Order attributes -->
-    <type name="Magento\Sales\Api\OrderRepositoryInterface">
-        <plugin name="tnw_idealdata_order_custom_attributes" type="TNW\Idealdata\Plugin\Order\AddCustomAttributesPlugin" sortOrder="10"/>
-        <plugin name="tnw_idealdata_order_item_attributes" type="TNW\Idealdata\Plugin\Order\AddOrderItemAttributesPlugin" sortOrder="20"/>
-    </type>
-
-    <!-- Issue #5c/5d: Cart attributes -->
+    <!-- Cart attributes -->
     <type name="Magento\Quote\Api\CartRepositoryInterface">
         <plugin name="tnw_idealdata_cart_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartAttributesPlugin" sortOrder="10"/>
         <plugin name="tnw_idealdata_cart_item_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartItemAttributesPlugin" sortOrder="20"/>
     </type>
 
-    <!-- Preferences: existing -->
+    <!-- Preferences -->
     <preference for="TNW\Idealdata\Api\OrderStatusRepositoryInterface" type="TNW\Idealdata\Model\OrderStatusRepository"/>
 
-    <!-- Preferences: Issue #4 -->
-    <preference for="TNW\Idealdata\Api\AbandonedCartRepositoryInterface" type="TNW\Idealdata\Model\AbandonedCartRepository"/>
-    <preference for="TNW\Idealdata\Api\Data\AbandonedCartSearchResultsInterface" type="TNW\Idealdata\Model\Data\AbandonedCartSearchResults"/>
-
-    <!-- Preferences: Issue #7c -->
     <preference for="TNW\Idealdata\Api\FailedTransactionRepositoryInterface" type="TNW\Idealdata\Model\FailedTransactionRepository"/>
     <preference for="TNW\Idealdata\Api\Data\FailedTransactionSearchResultsInterface" type="TNW\Idealdata\Model\Data\FailedTransactionSearchResults"/>
 </config>

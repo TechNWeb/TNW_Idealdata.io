@@ -7,15 +7,7 @@
         </resources>
     </route>
 
-    <!-- Issue #4: Abandoned carts -->
-    <route url="/V1/tnw/carts/abandoned" method="GET">
-        <service class="TNW\Idealdata\Api\AbandonedCartRepositoryInterface" method="getList"/>
-        <resources>
-            <resource ref="TNW_Idealdata::abandoned_carts_read"/>
-        </resources>
-    </route>
-
-    <!-- Issue #7c: Failed transactions -->
+    <!-- Failed transactions -->
     <route url="/V1/tnw/carts/failed-transactions" method="GET">
         <service class="TNW\Idealdata\Api\FailedTransactionRepositoryInterface" method="getList"/>
         <resources>

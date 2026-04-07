@@ -10,57 +10,48 @@ use Magento\Framework\Api\SearchCriteriaInterface;
 use Magento\Framework\App\ResourceConnection;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Intercepts the standard `updated_at` filter on GET /V1/products and augments the
+ * result set with products whose cataloginventory_stock_item.updated_at also matches
+ * the same condition. This way a single native API call returns both product-level
+ * and stock-level changes — no custom filter field needed.
+ */
 class StockUpdatedAtFilterPlugin
 {
-    private ?string $stockUpdatedAtValue = null;
-    private ?string $stockUpdatedAtCondition = null;
+    private ?string $updatedAtValue = null;
+    private ?string $updatedAtCondition = null;
 
     public function __construct(
         private readonly ResourceConnection $resourceConnection,
+        private readonly ProductRepositoryInterface $productRepository,
         private readonly LoggerInterface $logger
     ) {
     }
 
+    /**
+     * Detect the standard `updated_at` filter and store its value.
+     * Do NOT remove it — let Magento apply it normally.
+     */
     public function beforeGetList(
         ProductRepositoryInterface $subject,
         SearchCriteriaInterface $searchCriteria
     ): array {
         try {
-            $this->stockUpdatedAtValue = null;
-            $this->stockUpdatedAtCondition = null;
+            $this->updatedAtValue = null;
+            $this->updatedAtCondition = null;
 
-            $filterGroups = $searchCriteria->getFilterGroups();
-            $modified = false;
-
-            foreach ($filterGroups as $groupIndex => $filterGroup) {
-                $filters = $filterGroup->getFilters();
-                $remainingFilters = [];
-
-                foreach ($filters as $filter) {
-                    if ($filter->getField() === 'tnw_stock_updated_at') {
-                        $this->stockUpdatedAtValue = $filter->getValue();
-                        $this->stockUpdatedAtCondition = $filter->getConditionType() ?: 'gteq';
-                        $modified = true;
-                    } else {
-                        $remainingFilters[] = $filter;
+            foreach ($searchCriteria->getFilterGroups() as $filterGroup) {
+                foreach ($filterGroup->getFilters() as $filter) {
+                    if ($filter->getField() === 'updated_at') {
+                        $this->updatedAtValue = $filter->getValue();
+                        $this->updatedAtCondition = $filter->getConditionType() ?: 'gteq';
+                        break 2;
                     }
                 }
-
-                if (count($remainingFilters) !== count($filters)) {
-                    if (empty($remainingFilters)) {
-                        unset($filterGroups[$groupIndex]);
-                    } else {
-                        $filterGroup->setFilters($remainingFilters);
-                    }
-                }
-            }
-
-            if ($modified) {
-                $searchCriteria->setFilterGroups(array_values($filterGroups));
             }
         } catch (\Throwable $e) {
             $this->logger->error(
-                'TNW_Idealdata: Failed to process tnw_stock_updated_at filter',
+                'TNW_Idealdata: Failed to detect updated_at filter for stock merge',
                 ['exception' => $e->getMessage()]
             );
         }
@@ -69,63 +60,88 @@ class StockUpdatedAtFilterPlugin
     }
 
     /**
+     * After Magento returns products matching updated_at, find additional products
+     * whose stock changed in the same period but whose catalog_product_entity.updated_at
+     * did NOT change. Load them individually and merge into the result.
+     *
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     public function afterGetList(
         ProductRepositoryInterface $subject,
         ProductSearchResultsInterface $result
     ): ProductSearchResultsInterface {
-        if ($this->stockUpdatedAtValue === null) {
+        if ($this->updatedAtValue === null) {
             return $result;
         }
 
         try {
-            $stockUpdatedValue = $this->stockUpdatedAtValue;
-            $condition = $this->stockUpdatedAtCondition ?? 'gteq';
-            $this->stockUpdatedAtValue = null;
-            $this->stockUpdatedAtCondition = null;
+            $updatedAtValue = $this->updatedAtValue;
+            $condition = $this->updatedAtCondition ?? 'gteq';
+            $this->updatedAtValue = null;
+            $this->updatedAtCondition = null;
 
-            $connection = $this->resourceConnection->getConnection();
-            $tableName = $this->resourceConnection->getTableName('cataloginventory_stock_item');
+            // Collect IDs already in result
+            $existingIds = [];
+            foreach ($result->getItems() as $product) {
+                $existingIds[(int) $product->getId()] = true;
+            }
 
-            $conditionMap = [
-                'gteq' => '>=',
-                'lteq' => '<=',
-                'gt'   => '>',
-                'lt'   => '<',
-                'eq'   => '=',
-                'neq'  => '!=',
-            ];
-            $sqlOp = $conditionMap[$condition] ?? '>=';
+            // Find product IDs whose stock changed in the same period
+            $stockChangedIds = $this->getStockChangedProductIds($updatedAtValue, $condition);
 
-            $select = $connection->select()
-                ->from($tableName, ['product_id'])
-                ->where("updated_at {$sqlOp} ?", $stockUpdatedValue);
+            // Filter to only IDs NOT already in the result
+            $missingIds = array_diff($stockChangedIds, array_keys($existingIds));
 
-            $validProductIds = array_map('intval', $connection->fetchCol($select));
-
-            if (empty($validProductIds)) {
-                $result->setItems([]);
-                $result->setTotalCount(0);
+            if (empty($missingIds)) {
                 return $result;
             }
 
-            $filteredItems = [];
-            foreach ($result->getItems() as $product) {
-                if (in_array((int) $product->getId(), $validProductIds, true)) {
-                    $filteredItems[] = $product;
+            // Load the missing products and merge
+            $items = $result->getItems();
+            foreach ($missingIds as $productId) {
+                try {
+                    $product = $subject->getById($productId);
+                    $items[] = $product;
+                } catch (\Throwable $e) {
+                    // Product may have been deleted or is not visible — skip
+                    continue;
                 }
             }
 
-            $result->setItems($filteredItems);
-            $result->setTotalCount(count($filteredItems));
+            $result->setItems($items);
+            $result->setTotalCount(count($items));
         } catch (\Throwable $e) {
             $this->logger->error(
-                'TNW_Idealdata: Failed to apply tnw_stock_updated_at post-filter',
+                'TNW_Idealdata: Failed to merge stock-changed products',
                 ['exception' => $e->getMessage()]
             );
         }
 
         return $result;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function getStockChangedProductIds(string $value, string $condition): array
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $tableName = $this->resourceConnection->getTableName('cataloginventory_stock_item');
+
+        $conditionMap = [
+            'gteq' => '>=',
+            'lteq' => '<=',
+            'gt'   => '>',
+            'lt'   => '<',
+            'eq'   => '=',
+            'neq'  => '!=',
+        ];
+        $sqlOp = $conditionMap[$condition] ?? '>=';
+
+        $select = $connection->select()
+            ->from($tableName, ['product_id'])
+            ->where("updated_at {$sqlOp} ?", $value);
+
+        return array_map('intval', $connection->fetchCol($select));
     }
 }

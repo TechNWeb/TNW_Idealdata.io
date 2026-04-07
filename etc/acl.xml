@@ -5,8 +5,7 @@
         <resources>
             <resource id="Magento_Backend::admin">
                 <resource id="TNW_Idealdata::config" title="TNW IdealData Configuration" sortOrder="10"/>
-                <resource id="TNW_Idealdata::abandoned_carts_read" title="TNW IdealData: View Abandoned Carts" sortOrder="20"/>
-                <resource id="TNW_Idealdata::failed_transactions_read" title="TNW IdealData: View Failed Transactions" sortOrder="30"/>
+                <resource id="TNW_Idealdata::failed_transactions_read" title="TNW IdealData: View Failed Transactions" sortOrder="20"/>
             </resource>
         </resources>
     </acl>
