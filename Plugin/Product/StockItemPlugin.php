@@ -8,16 +8,13 @@ use Magento\Catalog\Api\Data\ProductExtensionFactory;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Api\Data\ProductSearchResultsInterface;
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\CatalogInventory\Api\Data\StockItemInterface;
 use Magento\CatalogInventory\Api\StockRegistryInterface;
-use Magento\CatalogInventory\Model\ResourceModel\Stock\Item\CollectionFactory as StockItemCollectionFactory;
 use Psr\Log\LoggerInterface;
 
 class StockItemPlugin
 {
     public function __construct(
         private readonly StockRegistryInterface $stockRegistry,
-        private readonly StockItemCollectionFactory $stockItemCollectionFactory,
         private readonly ProductExtensionFactory $extensionFactory,
         private readonly LoggerInterface $logger
     ) {
@@ -50,44 +47,12 @@ class StockItemPlugin
         ProductSearchResultsInterface $result
     ): ProductSearchResultsInterface {
         try {
-            $products = $result->getItems();
-            if (empty($products)) {
-                return $result;
-            }
-
-            $productIds = [];
-            foreach ($products as $product) {
-                $productId = (int) $product->getId();
-                if ($productId > 0) {
-                    $productIds[] = $productId;
-                }
-            }
-
-            if (empty($productIds)) {
-                return $result;
-            }
-
-            $stockItemsMap = $this->batchLoadStockItems($productIds);
-
-            foreach ($products as $product) {
-                $productId = (int) $product->getId();
-                $extensionAttributes = $product->getExtensionAttributes();
-                if ($extensionAttributes === null) {
-                    $extensionAttributes = $this->extensionFactory->create();
-                }
-
-                if ($extensionAttributes->getStockItem() !== null) {
-                    continue;
-                }
-
-                if (isset($stockItemsMap[$productId])) {
-                    $extensionAttributes->setStockItem($stockItemsMap[$productId]);
-                    $product->setExtensionAttributes($extensionAttributes);
-                }
+            foreach ($result->getItems() as $product) {
+                $this->attachStockItemToProduct($product);
             }
         } catch (\Throwable $e) {
             $this->logger->error(
-                'TNW_Idealdata: Failed to batch-load stock items for product list',
+                'TNW_Idealdata: Failed to attach stock items to product list',
                 ['exception' => $e->getMessage()]
             );
         }
@@ -111,25 +76,15 @@ class StockItemPlugin
             return;
         }
 
-        $stockItem = $this->stockRegistry->getStockItem($productId);
-        $extensionAttributes->setStockItem($stockItem);
-        $product->setExtensionAttributes($extensionAttributes);
-    }
-
-    /**
-     * @param int[] $productIds
-     * @return StockItemInterface[]
-     */
-    private function batchLoadStockItems(array $productIds): array
-    {
-        $collection = $this->stockItemCollectionFactory->create();
-        $collection->addFieldToFilter('product_id', ['in' => $productIds]);
-
-        $map = [];
-        foreach ($collection as $stockItem) {
-            $map[(int) $stockItem->getProductId()] = $stockItem;
+        try {
+            $stockItem = $this->stockRegistry->getStockItem($productId);
+            $extensionAttributes->setStockItem($stockItem);
+            $product->setExtensionAttributes($extensionAttributes);
+        } catch (\Throwable $e) {
+            $this->logger->debug(
+                'TNW_Idealdata: Could not load stock item for product ' . $productId,
+                ['exception' => $e->getMessage()]
+            );
         }
-
-        return $map;
     }
 }
