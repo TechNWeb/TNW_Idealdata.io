@@ -37,14 +37,6 @@
             "TNW_QPT_STORE_UPDATED": true
         }
     },
-    "cataloginventory_stock_item": {
-        "column": {
-            "tnw_updated_at": true
-        },
-        "index": {
-            "TNW_CSI_UPDATED_AT": true
-        }
-    },
     "inventory_source_item": {
         "column": {
             "tnw_updated_at": true
