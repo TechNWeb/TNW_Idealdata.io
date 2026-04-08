@@ -125,7 +125,6 @@ class StockUpdatedAtFilterPlugin
     private function getStockChangedProductIds(string $value, string $condition): array
     {
         $connection = $this->resourceConnection->getConnection();
-        $tableName = $this->resourceConnection->getTableName('cataloginventory_stock_item');
 
         $conditionMap = [
             'gteq' => '>=',
@@ -137,10 +136,33 @@ class StockUpdatedAtFilterPlugin
         ];
         $sqlOp = $conditionMap[$condition] ?? '>=';
 
+        // 1. Legacy cataloginventory_stock_item
+        $legacyTable = $this->resourceConnection->getTableName('cataloginventory_stock_item');
         $select = $connection->select()
-            ->from($tableName, ['product_id'])
+            ->from($legacyTable, ['product_id'])
             ->where("updated_at {$sqlOp} ?", $value);
+        $ids = array_map('intval', $connection->fetchCol($select));
 
-        return array_map('intval', $connection->fetchCol($select));
+        // 2. MSI inventory_source_item (if table exists)
+        try {
+            $msiTable = $this->resourceConnection->getTableName('inventory_source_item');
+            if ($connection->isTableExists($msiTable)) {
+                $productTable = $this->resourceConnection->getTableName('catalog_product_entity');
+                $msiSelect = $connection->select()
+                    ->from(['isi' => $msiTable], [])
+                    ->join(
+                        ['cpe' => $productTable],
+                        'cpe.sku = isi.sku',
+                        ['entity_id']
+                    )
+                    ->where("isi.updated_at {$sqlOp} ?", $value);
+                $msiIds = array_map('intval', $connection->fetchCol($msiSelect));
+                $ids = array_values(array_unique(array_merge($ids, $msiIds)));
+            }
+        } catch (\Throwable $e) {
+            // MSI not available — skip
+        }
+
+        return $ids;
     }
 }

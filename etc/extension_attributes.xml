@@ -8,6 +8,7 @@
     <!-- Issue #1: manage_stock on Product -->
     <extension_attributes for="Magento\Catalog\Api\Data\ProductInterface">
         <attribute code="manage_stock" type="int"/>
+        <attribute code="source_items" type="Magento\InventoryApi\Api\Data\SourceItemInterface[]"/>
     </extension_attributes>
 
     <!-- Extra fields on Cart (Quote) -->
