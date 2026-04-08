@@ -32,7 +32,8 @@ class StockItemPlugin
         ProductInterface $result
     ): ProductInterface {
         $this->safeAttachStockItem($result);
-        $this->safeAttachSourceItems($result);
+        $sourceItemsMap = $this->loadSourceItemsBySkus([$result->getSku()]);
+        $this->safeAttachSourceItems($result, $sourceItemsMap);
         return $result;
     }
 
@@ -48,8 +49,15 @@ class StockItemPlugin
             return $result;
         }
 
-        // Batch-load source items for all SKUs at once
-        $sourceItemsMap = $this->safeBatchLoadSourceItems($products);
+        $skus = [];
+        foreach ($products as $product) {
+            $sku = $product->getSku();
+            if ($sku) {
+                $skus[] = $sku;
+            }
+        }
+
+        $sourceItemsMap = !empty($skus) ? $this->loadSourceItemsBySkus($skus) : [];
 
         foreach ($products as $product) {
             $this->safeAttachStockItem($product);
@@ -88,9 +96,9 @@ class StockItemPlugin
     }
 
     /**
-     * @param array<string, array> $preloadedMap Pre-loaded source items keyed by SKU
+     * @param array<string, \Magento\InventoryApi\Api\Data\SourceItemInterface[]> $sourceItemsMap
      */
-    private function safeAttachSourceItems(ProductInterface $product, array $preloadedMap = []): void
+    private function safeAttachSourceItems(ProductInterface $product, array $sourceItemsMap): void
     {
         try {
             $extensionAttributes = $product->getExtensionAttributes();
@@ -98,8 +106,7 @@ class StockItemPlugin
                 $extensionAttributes = $this->extensionFactory->create();
             }
 
-            // Check if the generated method exists (may not after adding the attribute without recompile)
-            if (!method_exists($extensionAttributes, 'getSourceItems')) {
+            if (!method_exists($extensionAttributes, 'setSourceItems')) {
                 return;
             }
 
@@ -108,34 +115,32 @@ class StockItemPlugin
             }
 
             $sku = $product->getSku();
-            if (empty($sku)) {
-                return;
-            }
+            $sourceItems = $sourceItemsMap[$sku] ?? [];
 
-            if (!empty($preloadedMap)) {
-                $sourceItems = $preloadedMap[$sku] ?? [];
-            } else {
-                $sourceItems = $this->loadSourceItemsBySku($sku);
-            }
-
-            if (method_exists($extensionAttributes, 'setSourceItems')) {
-                $extensionAttributes->setSourceItems($sourceItems);
-                $product->setExtensionAttributes($extensionAttributes);
-            }
+            $extensionAttributes->setSourceItems($sourceItems);
+            $product->setExtensionAttributes($extensionAttributes);
         } catch (\Throwable $e) {
             $this->logger->debug(
-                'TNW_Idealdata: Could not load source items for SKU ' . ($product->getSku() ?? '?'),
+                'TNW_Idealdata: Could not set source items for SKU ' . ($product->getSku() ?? '?'),
                 ['exception' => $e->getMessage()]
             );
         }
     }
 
     /**
-     * @param ProductInterface[] $products
-     * @return array<string, array>
+     * Single SQL query to load source items for one or many SKUs.
+     * Used by both afterGet and afterGetList — consistent behavior.
+     *
+     * @param string[] $skus
+     * @return array<string, \Magento\InventoryApi\Api\Data\SourceItemInterface[]>
      */
-    private function safeBatchLoadSourceItems(array $products): array
+    private function loadSourceItemsBySkus(array $skus): array
     {
+        $skus = array_filter($skus);
+        if (empty($skus)) {
+            return [];
+        }
+
         try {
             $connection = $this->resourceConnection->getConnection();
             $tableName = $this->resourceConnection->getTableName('inventory_source_item');
@@ -144,29 +149,23 @@ class StockItemPlugin
                 return [];
             }
 
-            $skus = [];
-            foreach ($products as $product) {
-                $sku = $product->getSku();
-                if ($sku) {
-                    $skus[] = $sku;
-                }
-            }
-
-            if (empty($skus)) {
-                return [];
-            }
-
             $select = $connection->select()
-                ->from($tableName)
+                ->from($tableName, ['sku', 'source_code', 'quantity', 'status'])
                 ->where('sku IN (?)', $skus);
 
             $rows = $connection->fetchAll($select);
+
+            if (empty($rows)) {
+                return [];
+            }
 
             if (!class_exists(\Magento\InventoryApi\Api\Data\SourceItemInterfaceFactory::class)) {
                 return [];
             }
 
-            $factory = $this->objectManager->get(\Magento\InventoryApi\Api\Data\SourceItemInterfaceFactory::class);
+            $factory = $this->objectManager->get(
+                \Magento\InventoryApi\Api\Data\SourceItemInterfaceFactory::class
+            );
 
             $map = [];
             foreach ($rows as $row) {
@@ -182,20 +181,10 @@ class StockItemPlugin
             return $map;
         } catch (\Throwable $e) {
             $this->logger->debug(
-                'TNW_Idealdata: Could not batch-load MSI source items',
+                'TNW_Idealdata: Could not load MSI source items',
                 ['exception' => $e->getMessage()]
             );
             return [];
         }
-    }
-
-    private function loadSourceItemsBySku(string $sku): array
-    {
-        if (!interface_exists(\Magento\InventoryApi\Api\GetSourceItemsBySkuInterface::class)) {
-            return [];
-        }
-
-        $service = $this->objectManager->get(\Magento\InventoryApi\Api\GetSourceItemsBySkuInterface::class);
-        return $service->execute($sku);
     }
 }
