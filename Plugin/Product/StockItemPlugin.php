@@ -8,7 +8,6 @@ use Magento\Catalog\Api\Data\ProductExtensionFactory;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Api\Data\ProductSearchResultsInterface;
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\ObjectManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -16,7 +15,6 @@ use Psr\Log\LoggerInterface;
 class StockItemPlugin
 {
     public function __construct(
-        private readonly StockRegistryInterface $stockRegistry,
         private readonly ProductExtensionFactory $extensionFactory,
         private readonly ResourceConnection $resourceConnection,
         private readonly ObjectManagerInterface $objectManager,
@@ -31,9 +29,8 @@ class StockItemPlugin
         ProductRepositoryInterface $subject,
         ProductInterface $result
     ): ProductInterface {
-        $this->safeAttachStockItem($result);
-        $sourceItemsMap = $this->loadSourceItemsBySkus([$result->getSku()]);
-        $this->safeAttachSourceItems($result, $sourceItemsMap);
+        $products = [$result];
+        $this->attachAllStockData($products);
         return $result;
     }
 
@@ -45,121 +42,145 @@ class StockItemPlugin
         ProductSearchResultsInterface $result
     ): ProductSearchResultsInterface {
         $products = $result->getItems();
-        if (empty($products)) {
-            return $result;
+        if (!empty($products)) {
+            $this->attachAllStockData($products);
         }
+        return $result;
+    }
 
+    /**
+     * Single method that batch-loads stock_item, source_items, and manage_stock
+     * for all products in one pass. Exactly 2 SQL queries total regardless of
+     * product count: 1 for cataloginventory_stock_item, 1 for inventory_source_item.
+     *
+     * @param ProductInterface[] $products
+     */
+    private function attachAllStockData(array $products): void
+    {
+        $productIds = [];
         $skus = [];
         foreach ($products as $product) {
+            $id = (int) $product->getId();
             $sku = $product->getSku();
+            if ($id > 0) {
+                $productIds[$id] = $product;
+            }
             if ($sku) {
                 $skus[] = $sku;
             }
         }
 
-        $sourceItemsMap = !empty($skus) ? $this->loadSourceItemsBySkus($skus) : [];
+        // Batch 1: stock items (1 SQL query)
+        $stockItemsMap = $this->batchLoadStockItems(array_keys($productIds));
 
+        // Batch 2: source items (1 SQL query)
+        $sourceItemsMap = !empty($skus) ? $this->batchLoadSourceItems($skus) : [];
+
+        // Attach to each product
         foreach ($products as $product) {
-            $this->safeAttachStockItem($product);
-            $this->safeAttachSourceItems($product, $sourceItemsMap);
-        }
+            try {
+                $extensionAttributes = $product->getExtensionAttributes();
+                if ($extensionAttributes === null) {
+                    $extensionAttributes = $this->extensionFactory->create();
+                }
 
-        return $result;
-    }
+                // stock_item
+                $productId = (int) $product->getId();
+                if ($extensionAttributes->getStockItem() === null && isset($stockItemsMap[$productId])) {
+                    $extensionAttributes->setStockItem($stockItemsMap[$productId]);
+                }
 
-    private function safeAttachStockItem(ProductInterface $product): void
-    {
-        try {
-            $extensionAttributes = $product->getExtensionAttributes();
-            if ($extensionAttributes === null) {
-                $extensionAttributes = $this->extensionFactory->create();
+                // manage_stock — derived from stock_item, no extra query
+                if ($extensionAttributes->getManageStock() === null) {
+                    $stockItem = $extensionAttributes->getStockItem();
+                    $extensionAttributes->setManageStock(
+                        $stockItem ? (int) $stockItem->getManageStock() : 0
+                    );
+                }
+
+                // source_items
+                if (method_exists($extensionAttributes, 'setSourceItems')
+                    && $extensionAttributes->getSourceItems() === null
+                ) {
+                    $sku = $product->getSku();
+                    $extensionAttributes->setSourceItems($sourceItemsMap[$sku] ?? []);
+                }
+
+                $product->setExtensionAttributes($extensionAttributes);
+            } catch (\Throwable $e) {
+                $this->logger->debug(
+                    'TNW_Idealdata: Could not attach stock data to product ' . ($product->getId() ?? '?'),
+                    ['exception' => $e->getMessage()]
+                );
             }
-
-            if ($extensionAttributes->getStockItem() !== null) {
-                return;
-            }
-
-            $productId = (int) $product->getId();
-            if ($productId <= 0) {
-                return;
-            }
-
-            $stockItem = $this->stockRegistry->getStockItem($productId);
-            $extensionAttributes->setStockItem($stockItem);
-            $product->setExtensionAttributes($extensionAttributes);
-        } catch (\Throwable $e) {
-            $this->logger->debug(
-                'TNW_Idealdata: Could not load stock item for product ' . ($product->getId() ?? '?'),
-                ['exception' => $e->getMessage()]
-            );
         }
     }
 
     /**
-     * @param array<string, \Magento\InventoryApi\Api\Data\SourceItemInterface[]> $sourceItemsMap
+     * 1 SQL query for all product IDs.
+     *
+     * @param int[] $productIds
+     * @return array<int, \Magento\CatalogInventory\Api\Data\StockItemInterface>
      */
-    private function safeAttachSourceItems(ProductInterface $product, array $sourceItemsMap): void
+    private function batchLoadStockItems(array $productIds): array
     {
+        if (empty($productIds)) {
+            return [];
+        }
+
         try {
-            $extensionAttributes = $product->getExtensionAttributes();
-            if ($extensionAttributes === null) {
-                $extensionAttributes = $this->extensionFactory->create();
+            $connection = $this->resourceConnection->getConnection();
+            $table = $this->resourceConnection->getTableName('cataloginventory_stock_item');
+
+            $select = $connection->select()
+                ->from($table)
+                ->where('product_id IN (?)', $productIds);
+
+            $rows = $connection->fetchAll($select);
+
+            $factory = $this->objectManager->get(
+                \Magento\CatalogInventory\Api\Data\StockItemInterfaceFactory::class
+            );
+
+            $map = [];
+            foreach ($rows as $row) {
+                $stockItem = $factory->create(['data' => $row]);
+                $map[(int) $row['product_id']] = $stockItem;
             }
 
-            if (!method_exists($extensionAttributes, 'setSourceItems')) {
-                return;
-            }
-
-            if ($extensionAttributes->getSourceItems() !== null) {
-                return;
-            }
-
-            $sku = $product->getSku();
-            $sourceItems = $sourceItemsMap[$sku] ?? [];
-
-            $extensionAttributes->setSourceItems($sourceItems);
-            $product->setExtensionAttributes($extensionAttributes);
+            return $map;
         } catch (\Throwable $e) {
             $this->logger->debug(
-                'TNW_Idealdata: Could not set source items for SKU ' . ($product->getSku() ?? '?'),
+                'TNW_Idealdata: Could not batch-load stock items',
                 ['exception' => $e->getMessage()]
             );
+            return [];
         }
     }
 
     /**
-     * Single SQL query to load source items for one or many SKUs.
-     * Used by both afterGet and afterGetList — consistent behavior.
+     * 1 SQL query for all SKUs.
      *
      * @param string[] $skus
      * @return array<string, \Magento\InventoryApi\Api\Data\SourceItemInterface[]>
      */
-    private function loadSourceItemsBySkus(array $skus): array
+    private function batchLoadSourceItems(array $skus): array
     {
-        $skus = array_filter($skus);
         if (empty($skus)) {
             return [];
         }
 
         try {
             $connection = $this->resourceConnection->getConnection();
-            $tableName = $this->resourceConnection->getTableName('inventory_source_item');
-
-            if (!$connection->isTableExists($tableName)) {
-                return [];
-            }
+            $table = $this->resourceConnection->getTableName('inventory_source_item');
 
             $select = $connection->select()
-                ->from($tableName, ['sku', 'source_code', 'quantity', 'status'])
+                ->from($table, ['sku', 'source_code', 'quantity', 'status'])
                 ->where('sku IN (?)', $skus);
 
             $rows = $connection->fetchAll($select);
 
             if (empty($rows)) {
-                return [];
-            }
-
-            if (!class_exists(\Magento\InventoryApi\Api\Data\SourceItemInterfaceFactory::class)) {
                 return [];
             }
 
@@ -181,7 +202,7 @@ class StockItemPlugin
             return $map;
         } catch (\Throwable $e) {
             $this->logger->debug(
-                'TNW_Idealdata: Could not load MSI source items',
+                'TNW_Idealdata: Could not batch-load source items',
                 ['exception' => $e->getMessage()]
             );
             return [];
