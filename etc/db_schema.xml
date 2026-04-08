@@ -84,4 +84,16 @@
             <column name="tnw_updated_at"/>
         </index>
     </table>
+
+    <!-- Add tnw_updated_at to customer_address_entity for delta-sync.
+         nullable=true + no default: existing rows stay NULL (not synced until actually changed).
+         on_update=true: MySQL sets CURRENT_TIMESTAMP on any row modification. -->
+    <table name="customer_address_entity" resource="default">
+        <column xsi:type="timestamp" name="tnw_updated_at" nullable="true"
+                on_update="true"
+                comment="TNW IdealData: auto-updated timestamp for delta-sync"/>
+        <index referenceId="TNW_CAE_UPDATED_AT" indexType="btree">
+            <column name="tnw_updated_at"/>
+        </index>
+    </table>
 </schema>

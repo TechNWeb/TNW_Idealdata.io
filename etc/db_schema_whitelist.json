@@ -44,5 +44,13 @@
         "index": {
             "TNW_ISI_UPDATED_AT": true
         }
+    },
+    "customer_address_entity": {
+        "column": {
+            "tnw_updated_at": true
+        },
+        "index": {
+            "TNW_CAE_UPDATED_AT": true
+        }
     }
 }
