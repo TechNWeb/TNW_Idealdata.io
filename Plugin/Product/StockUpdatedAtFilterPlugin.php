@@ -136,17 +136,30 @@ class StockUpdatedAtFilterPlugin
         ];
         $sqlOp = $conditionMap[$condition] ?? '>=';
 
-        // 1. Legacy cataloginventory_stock_item
-        $legacyTable = $this->resourceConnection->getTableName('cataloginventory_stock_item');
-        $select = $connection->select()
-            ->from($legacyTable, ['product_id'])
-            ->where("updated_at {$sqlOp} ?", $value);
-        $ids = array_map('intval', $connection->fetchCol($select));
+        $ids = [];
 
-        // 2. MSI inventory_source_item (if table exists)
+        // 1. Legacy cataloginventory_stock_item (may not have updated_at)
+        try {
+            $legacyTable = $this->resourceConnection->getTableName('cataloginventory_stock_item');
+            if ($connection->isTableExists($legacyTable)
+                && $connection->tableColumnExists($legacyTable, 'updated_at')) {
+                $select = $connection->select()
+                    ->from($legacyTable, ['product_id'])
+                    ->where("updated_at {$sqlOp} ?", $value);
+                $ids = array_map('intval', $connection->fetchCol($select));
+            }
+        } catch (\Throwable $e) {
+            $this->logger->debug(
+                'TNW_Idealdata: Could not query cataloginventory_stock_item.updated_at',
+                ['exception' => $e->getMessage()]
+            );
+        }
+
+        // 2. MSI inventory_source_item — uses tnw_updated_at column added by this module
         try {
             $msiTable = $this->resourceConnection->getTableName('inventory_source_item');
-            if ($connection->isTableExists($msiTable)) {
+            if ($connection->isTableExists($msiTable)
+                && $connection->tableColumnExists($msiTable, 'tnw_updated_at')) {
                 $productTable = $this->resourceConnection->getTableName('catalog_product_entity');
                 $msiSelect = $connection->select()
                     ->from(['isi' => $msiTable], [])
@@ -160,7 +173,10 @@ class StockUpdatedAtFilterPlugin
                 $ids = array_values(array_unique(array_merge($ids, $msiIds)));
             }
         } catch (\Throwable $e) {
-            // MSI not available — skip
+            $this->logger->debug(
+                'TNW_Idealdata: Could not query inventory_source_item.tnw_updated_at',
+                ['exception' => $e->getMessage()]
+            );
         }
 
         return $ids;
