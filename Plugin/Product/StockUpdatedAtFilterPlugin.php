@@ -13,13 +13,12 @@ use Psr\Log\LoggerInterface;
 /**
  * Intercepts the standard `updated_at` filter on GET /V1/products and augments
  * the result with products whose inventory_source_item.tnw_updated_at also
- * matches the same condition.
+ * matches the same condition but catalog_product_entity.updated_at does NOT.
  *
- * Pagination logic:
- * 1. total_count = changed products + stock-only-changed products (deduplicated)
- * 2. First fill the page with Magento's native product results
- * 3. If page has room (items < pageSize), fill remaining slots with stock-changed products
- * 4. Deduplication: a product that changed both itself and stock appears only once
+ * All pagination is done in SQL — no full ID arrays loaded into PHP memory.
+ *
+ * total_count = native changed products + stock-only changed products
+ * Pages: native products first, then stock-only products fill remaining slots.
  */
 class StockUpdatedAtFilterPlugin
 {
@@ -84,72 +83,58 @@ class StockUpdatedAtFilterPlugin
             $this->updatedAtValue = null;
             $this->updatedAtCondition = null;
 
-            // IDs of products Magento already returned (changed at product level)
-            $existingIds = [];
-            foreach ($result->getItems() as $product) {
-                $existingIds[(int) $product->getId()] = true;
-            }
-
             $nativeTotal = $result->getTotalCount();
             $nativeItemCount = count($result->getItems());
 
-            // Get all stock-only-changed product IDs (NOT already changed at product level)
-            $stockOnlyIds = $this->getStockOnlyChangedProductIds($updatedAtValue, $condition);
+            // Single COUNT query: stock-only changed products (not changed at product level)
+            $stockOnlyTotal = $this->getStockOnlyChangedCount($updatedAtValue, $condition);
 
-            // Deduplicate: remove IDs that Magento already knows about
-            // (products changed at BOTH product and stock level)
-            // We need to check against ALL native IDs, not just this page
-            $overlapCount = $this->countOverlap($updatedAtValue, $condition);
-            $stockOnlyTotal = count($stockOnlyIds) - $overlapCount;
-            if ($stockOnlyTotal < 0) {
-                $stockOnlyTotal = 0;
+            if ($stockOnlyTotal === 0) {
+                return $result;
             }
 
-            // Combined total_count (deduplicated)
-            $combinedTotal = $nativeTotal + $stockOnlyTotal;
-            $result->setTotalCount($combinedTotal);
+            // Update total_count
+            $result->setTotalCount($nativeTotal + $stockOnlyTotal);
 
-            // If this page is already full, no need to add stock items
+            // If this page is full with native products — done
             if ($nativeItemCount >= $pageSize) {
                 return $result;
             }
 
-            // Remove IDs already on this page
-            $stockOnlyIds = array_diff($stockOnlyIds, array_keys($existingIds));
-
-            if (empty($stockOnlyIds)) {
-                return $result;
-            }
-
-            // Calculate how many stock-changed products to add to this page
+            // How many slots to fill with stock-only products
             $slotsAvailable = $pageSize - $nativeItemCount;
 
-            // Calculate offset into stock-only list based on pagination
-            // Stock items start appearing after all native product pages are exhausted
+            // Calculate offset into stock-only results
             $nativePages = $nativeTotal > 0 ? (int) ceil($nativeTotal / $pageSize) : 0;
-
-            if ($currentPage <= $nativePages && $nativeItemCount >= $pageSize) {
-                // Still in native pages and page is full — nothing to add
-                return $result;
-            }
-
-            // How many stock-only items to skip (for pages beyond the last native page)
             $stockOffset = 0;
-            if ($currentPage > $nativePages) {
-                // We're on a page that's entirely stock-only items
+
+            if ($currentPage > $nativePages && $nativePages > 0) {
+                // Entirely beyond native pages
                 $slotsAvailable = $pageSize;
                 $stockOffset = ($currentPage - $nativePages - 1) * $pageSize;
-
-                // Clear native items since we're past native pages
                 $result->setItems([]);
-                $nativeItemCount = 0;
+            } elseif ($currentPage > 1 && $nativePages === 0) {
+                // No native results at all, page > 1
+                $stockOffset = ($currentPage - 1) * $pageSize;
+                $slotsAvailable = $pageSize;
+                $result->setItems([]);
             }
-            // else: currentPage == nativePages (last native page, partially full)
-            // stockOffset = 0, fill remaining slots
+            // else: last native page with room — stockOffset = 0
 
-            // Slice the stock-only IDs for this page
-            $stockOnlyIds = array_values($stockOnlyIds);
-            $idsForPage = array_slice($stockOnlyIds, $stockOffset, $slotsAvailable);
+            // Exclude IDs already on this page
+            $existingIds = [];
+            foreach ($result->getItems() as $product) {
+                $existingIds[] = (int) $product->getId();
+            }
+
+            // Single SQL with LIMIT/OFFSET — never loads full array
+            $idsForPage = $this->getStockOnlyChangedIds(
+                $updatedAtValue,
+                $condition,
+                $slotsAvailable,
+                $stockOffset,
+                $existingIds
+            );
 
             if (empty($idsForPage)) {
                 return $result;
@@ -178,48 +163,14 @@ class StockUpdatedAtFilterPlugin
     }
 
     /**
-     * Get product IDs whose MSI stock changed but are NOT in the native
-     * catalog_product_entity.updated_at result set.
-     *
-     * @return int[]
+     * COUNT of products whose stock changed but product itself did NOT change.
+     * Single indexed query, no data loaded into memory.
      */
-    private function getStockOnlyChangedProductIds(string $value, string $condition): array
+    private function getStockOnlyChangedCount(string $value, string $condition): int
     {
         $connection = $this->resourceConnection->getConnection();
         $sqlOp = $this->toSqlOp($condition);
-
-        try {
-            $msiTable = $this->resourceConnection->getTableName('inventory_source_item');
-            $productTable = $this->resourceConnection->getTableName('catalog_product_entity');
-
-            $select = $connection->select()
-                ->distinct(true)
-                ->from(['isi' => $msiTable], [])
-                ->join(
-                    ['cpe' => $productTable],
-                    'cpe.sku = isi.sku',
-                    ['entity_id']
-                )
-                ->where("isi.tnw_updated_at {$sqlOp} ?", $value);
-
-            return array_map('intval', $connection->fetchCol($select));
-        } catch (\Throwable $e) {
-            $this->logger->debug(
-                'TNW_Idealdata: Could not query inventory_source_item.tnw_updated_at',
-                ['exception' => $e->getMessage()]
-            );
-            return [];
-        }
-    }
-
-    /**
-     * Count products that changed at BOTH product level AND stock level
-     * (to avoid double-counting in total_count).
-     */
-    private function countOverlap(string $value, string $condition): int
-    {
-        $connection = $this->resourceConnection->getConnection();
-        $sqlOp = $this->toSqlOp($condition);
+        $inverseSqlOp = $this->toInverseSqlOp($condition);
 
         try {
             $msiTable = $this->resourceConnection->getTableName('inventory_source_item');
@@ -233,11 +184,64 @@ class StockUpdatedAtFilterPlugin
                     []
                 )
                 ->where("isi.tnw_updated_at {$sqlOp} ?", $value)
-                ->where("cpe.updated_at {$sqlOp} ?", $value);
+                ->where("cpe.updated_at {$inverseSqlOp} ?", $value);
 
             return (int) $connection->fetchOne($select);
         } catch (\Throwable $e) {
+            $this->logger->debug(
+                'TNW_Idealdata: Could not count stock-only changed products',
+                ['exception' => $e->getMessage()]
+            );
             return 0;
+        }
+    }
+
+    /**
+     * Paginated IDs of products whose stock changed but product itself did NOT change.
+     * Uses SQL LIMIT/OFFSET — never loads more than pageSize IDs.
+     *
+     * @param int[] $excludeIds IDs already on the current page
+     * @return int[]
+     */
+    private function getStockOnlyChangedIds(
+        string $value,
+        string $condition,
+        int $limit,
+        int $offset,
+        array $excludeIds
+    ): array {
+        $connection = $this->resourceConnection->getConnection();
+        $sqlOp = $this->toSqlOp($condition);
+        $inverseSqlOp = $this->toInverseSqlOp($condition);
+
+        try {
+            $msiTable = $this->resourceConnection->getTableName('inventory_source_item');
+            $productTable = $this->resourceConnection->getTableName('catalog_product_entity');
+
+            $select = $connection->select()
+                ->distinct(true)
+                ->from(['isi' => $msiTable], [])
+                ->join(
+                    ['cpe' => $productTable],
+                    'cpe.sku = isi.sku',
+                    ['entity_id']
+                )
+                ->where("isi.tnw_updated_at {$sqlOp} ?", $value)
+                ->where("cpe.updated_at {$inverseSqlOp} ?", $value)
+                ->order('cpe.entity_id ASC')
+                ->limit($limit, $offset);
+
+            if (!empty($excludeIds)) {
+                $select->where('cpe.entity_id NOT IN (?)', $excludeIds);
+            }
+
+            return array_map('intval', $connection->fetchCol($select));
+        } catch (\Throwable $e) {
+            $this->logger->debug(
+                'TNW_Idealdata: Could not query stock-only changed product IDs',
+                ['exception' => $e->getMessage()]
+            );
+            return [];
         }
     }
 
@@ -248,5 +252,18 @@ class StockUpdatedAtFilterPlugin
             'lt'   => '<',  'eq'   => '=',  'neq' => '!=',
         ];
         return $map[$condition] ?? '>=';
+    }
+
+    /**
+     * Inverse condition: products that did NOT match the original filter.
+     * gt (>) → inverse is <= ; gteq (>=) → inverse is <
+     */
+    private function toInverseSqlOp(string $condition): string
+    {
+        $map = [
+            'gteq' => '<', 'lteq' => '>', 'gt' => '<=',
+            'lt'   => '>=', 'eq'  => '!=', 'neq' => '=',
+        ];
+        return $map[$condition] ?? '<';
     }
 }
