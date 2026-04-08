@@ -36,5 +36,13 @@
             "TNW_QPT_CUSTOMER_EMAIL": true,
             "TNW_QPT_STORE_UPDATED": true
         }
+    },
+    "inventory_source_item": {
+        "column": {
+            "tnw_updated_at": true
+        },
+        "index": {
+            "TNW_ISI_UPDATED_AT": true
+        }
     }
 }

@@ -155,7 +155,7 @@ class StockUpdatedAtFilterPlugin
                         'cpe.sku = isi.sku',
                         ['entity_id']
                     )
-                    ->where("isi.updated_at {$sqlOp} ?", $value);
+                    ->where("isi.tnw_updated_at {$sqlOp} ?", $value);
                 $msiIds = array_map('intval', $connection->fetchCol($msiSelect));
                 $ids = array_values(array_unique(array_merge($ids, $msiIds)));
             }
