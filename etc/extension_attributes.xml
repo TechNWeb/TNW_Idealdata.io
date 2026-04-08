@@ -5,9 +5,15 @@
         <attribute code="customer_type" type="string"/>
     </extension_attributes>
 
-    <!-- Issue #1: manage_stock on Product -->
+    <!-- Resolved stock configuration on Product (use_config flags applied) -->
     <extension_attributes for="Magento\Catalog\Api\Data\ProductInterface">
         <attribute code="manage_stock" type="int"/>
+        <attribute code="out_of_stock_threshold" type="float"/>
+        <attribute code="min_cart_qty" type="float"/>
+        <attribute code="max_cart_qty" type="float"/>
+        <attribute code="qty_uses_decimals" type="int"/>
+        <attribute code="backorders" type="int"/>
+        <attribute code="enable_qty_increments" type="int"/>
         <attribute code="source_items" type="Magento\InventoryApi\Api\Data\SourceItemInterface[]"/>
     </extension_attributes>
 

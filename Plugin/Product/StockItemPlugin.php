@@ -8,16 +8,31 @@ use Magento\Catalog\Api\Data\ProductExtensionFactory;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Api\Data\ProductSearchResultsInterface;
 use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\CatalogInventory\Api\Data\StockItemInterface;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\ObjectManagerInterface;
+use Magento\Store\Model\ScopeInterface;
 use Psr\Log\LoggerInterface;
 
 class StockItemPlugin
 {
+    /** Config paths for cataloginventory defaults */
+    private const CONFIG_MANAGE_STOCK = 'cataloginventory/item_options/manage_stock';
+    private const CONFIG_BACKORDERS = 'cataloginventory/item_options/backorders';
+    private const CONFIG_MIN_QTY = 'cataloginventory/item_options/min_qty';
+    private const CONFIG_MIN_SALE_QTY = 'cataloginventory/item_options/min_sale_qty';
+    private const CONFIG_MAX_SALE_QTY = 'cataloginventory/item_options/max_sale_qty';
+    private const CONFIG_ENABLE_QTY_INC = 'cataloginventory/item_options/enable_qty_increments';
+
+    /** @var array|null Cached config values (read once per request) */
+    private ?array $configDefaults = null;
+
     public function __construct(
         private readonly ProductExtensionFactory $extensionFactory,
         private readonly ResourceConnection $resourceConnection,
         private readonly ObjectManagerInterface $objectManager,
+        private readonly ScopeConfigInterface $scopeConfig,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -29,8 +44,7 @@ class StockItemPlugin
         ProductRepositoryInterface $subject,
         ProductInterface $result
     ): ProductInterface {
-        $products = [$result];
-        $this->attachAllStockData($products);
+        $this->attachAllStockData([$result]);
         return $result;
     }
 
@@ -49,9 +63,8 @@ class StockItemPlugin
     }
 
     /**
-     * Single method that batch-loads stock_item, source_items, and manage_stock
-     * for all products in one pass. Exactly 2 SQL queries total regardless of
-     * product count: 1 for cataloginventory_stock_item, 1 for inventory_source_item.
+     * Batch-loads stock_item + source_items + resolved stock config
+     * for all products. Exactly 2 SQL queries total.
      *
      * @param ProductInterface[] $products
      */
@@ -70,43 +83,34 @@ class StockItemPlugin
             }
         }
 
-        // Batch 1: stock items (1 SQL query)
         $stockItemsMap = $this->batchLoadStockItems(array_keys($productIds));
-
-        // Batch 2: source items (1 SQL query)
         $sourceItemsMap = !empty($skus) ? $this->batchLoadSourceItems($skus) : [];
+        $defaults = $this->getConfigDefaults();
 
-        // Attach to each product
         foreach ($products as $product) {
             try {
-                $extensionAttributes = $product->getExtensionAttributes();
-                if ($extensionAttributes === null) {
-                    $extensionAttributes = $this->extensionFactory->create();
+                $ext = $product->getExtensionAttributes();
+                if ($ext === null) {
+                    $ext = $this->extensionFactory->create();
                 }
 
-                // stock_item
+                // stock_item (raw)
                 $productId = (int) $product->getId();
-                if ($extensionAttributes->getStockItem() === null && isset($stockItemsMap[$productId])) {
-                    $extensionAttributes->setStockItem($stockItemsMap[$productId]);
+                $stockItem = $ext->getStockItem();
+                if ($stockItem === null && isset($stockItemsMap[$productId])) {
+                    $stockItem = $stockItemsMap[$productId];
+                    $ext->setStockItem($stockItem);
                 }
 
-                // manage_stock — derived from stock_item, no extra query
-                if ($extensionAttributes->getManageStock() === null) {
-                    $stockItem = $extensionAttributes->getStockItem();
-                    $extensionAttributes->setManageStock(
-                        $stockItem ? (int) $stockItem->getManageStock() : 0
-                    );
-                }
+                // Resolved stock configuration
+                $this->attachResolvedStockConfig($ext, $stockItem, $defaults);
 
                 // source_items
-                if (method_exists($extensionAttributes, 'setSourceItems')
-                    && $extensionAttributes->getSourceItems() === null
-                ) {
-                    $sku = $product->getSku();
-                    $extensionAttributes->setSourceItems($sourceItemsMap[$sku] ?? []);
+                if (method_exists($ext, 'setSourceItems') && $ext->getSourceItems() === null) {
+                    $ext->setSourceItems($sourceItemsMap[$product->getSku()] ?? []);
                 }
 
-                $product->setExtensionAttributes($extensionAttributes);
+                $product->setExtensionAttributes($ext);
             } catch (\Throwable $e) {
                 $this->logger->debug(
                     'TNW_Idealdata: Could not attach stock data to product ' . ($product->getId() ?? '?'),
@@ -117,10 +121,97 @@ class StockItemPlugin
     }
 
     /**
-     * 1 SQL query for all product IDs.
-     *
+     * Set resolved stock config values on extension attributes.
+     * When use_config_* is true, the value comes from system config.
+     * When false, the value comes from the stock item row.
+     */
+    private function attachResolvedStockConfig(
+        $ext,
+        ?StockItemInterface $stockItem,
+        array $defaults
+    ): void {
+        if ($ext->getManageStock() !== null) {
+            return; // already resolved
+        }
+
+        if ($stockItem === null) {
+            $ext->setManageStock((int) $defaults['manage_stock']);
+            $ext->setOutOfStockThreshold((float) $defaults['min_qty']);
+            $ext->setMinCartQty((float) $defaults['min_sale_qty']);
+            $ext->setMaxCartQty((float) $defaults['max_sale_qty']);
+            $ext->setQtyUsesDecimals(0);
+            $ext->setBackorders((int) $defaults['backorders']);
+            $ext->setEnableQtyIncrements((int) $defaults['enable_qty_increments']);
+            return;
+        }
+
+        // Manage Stock
+        $ext->setManageStock(
+            $stockItem->getUseConfigManageStock()
+                ? (int) $defaults['manage_stock']
+                : (int) $stockItem->getManageStock()
+        );
+
+        // Out-of-Stock Threshold (min_qty)
+        $ext->setOutOfStockThreshold(
+            $stockItem->getUseConfigMinQty()
+                ? (float) $defaults['min_qty']
+                : (float) $stockItem->getMinQty()
+        );
+
+        // Minimum Qty Allowed in Shopping Cart
+        $ext->setMinCartQty(
+            $stockItem->getUseConfigMinSaleQty()
+                ? (float) $defaults['min_sale_qty']
+                : (float) $stockItem->getMinSaleQty()
+        );
+
+        // Maximum Qty Allowed in Shopping Cart
+        $ext->setMaxCartQty(
+            $stockItem->getUseConfigMaxSaleQty()
+                ? (float) $defaults['max_sale_qty']
+                : (float) $stockItem->getMaxSaleQty()
+        );
+
+        // Qty Uses Decimals (no use_config flag)
+        $ext->setQtyUsesDecimals((int) $stockItem->getIsQtyDecimal());
+
+        // Backorders
+        $ext->setBackorders(
+            $stockItem->getUseConfigBackorders()
+                ? (int) $defaults['backorders']
+                : (int) $stockItem->getBackorders()
+        );
+
+        // Enable Qty Increments
+        $ext->setEnableQtyIncrements(
+            $stockItem->getUseConfigEnableQtyInc()
+                ? (int) $defaults['enable_qty_increments']
+                : (int) $stockItem->getEnableQtyIncrements()
+        );
+    }
+
+    /**
+     * Read config defaults once per request, cache in memory.
+     */
+    private function getConfigDefaults(): array
+    {
+        if ($this->configDefaults === null) {
+            $this->configDefaults = [
+                'manage_stock'          => $this->scopeConfig->getValue(self::CONFIG_MANAGE_STOCK, ScopeInterface::SCOPE_STORE) ?? 1,
+                'backorders'            => $this->scopeConfig->getValue(self::CONFIG_BACKORDERS, ScopeInterface::SCOPE_STORE) ?? 0,
+                'min_qty'               => $this->scopeConfig->getValue(self::CONFIG_MIN_QTY, ScopeInterface::SCOPE_STORE) ?? 0,
+                'min_sale_qty'          => $this->scopeConfig->getValue(self::CONFIG_MIN_SALE_QTY, ScopeInterface::SCOPE_STORE) ?? 1,
+                'max_sale_qty'          => $this->scopeConfig->getValue(self::CONFIG_MAX_SALE_QTY, ScopeInterface::SCOPE_STORE) ?? 10000,
+                'enable_qty_increments' => $this->scopeConfig->getValue(self::CONFIG_ENABLE_QTY_INC, ScopeInterface::SCOPE_STORE) ?? 0,
+            ];
+        }
+        return $this->configDefaults;
+    }
+
+    /**
      * @param int[] $productIds
-     * @return array<int, \Magento\CatalogInventory\Api\Data\StockItemInterface>
+     * @return array<int, StockItemInterface>
      */
     private function batchLoadStockItems(array $productIds): array
     {
@@ -159,8 +250,6 @@ class StockItemPlugin
     }
 
     /**
-     * 1 SQL query for all SKUs.
-     *
      * @param string[] $skus
      * @return array<string, \Magento\InventoryApi\Api\Data\SourceItemInterface[]>
      */
