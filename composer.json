@@ -6,14 +6,6 @@
   "license": "OSL-3.0",
   "require": {
     "magento/framework": ">=103.0.6",
-    "magento/module-catalog": "*",
-    "magento/module-catalog-inventory": "*",
-    "magento/module-inventory-api": "*",
-    "magento/module-customer": "*",
-    "magento/module-quote": "*",
-    "magento/module-sales": "*",
-    "magento/module-payment": "*",
-    "magento/module-webapi": "*",
     "tnw/marketing": "~2"
   },
   "autoload": {
