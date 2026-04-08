@@ -73,7 +73,17 @@
         </index>
     </table>
 
-    <!-- Add tnw_updated_at to inventory_source_item for delta-sync (MSI table has no updated_at) -->
+    <!-- Add tnw_updated_at to cataloginventory_stock_item for delta-sync -->
+    <table name="cataloginventory_stock_item" resource="default">
+        <column xsi:type="timestamp" name="tnw_updated_at" nullable="false"
+                default="CURRENT_TIMESTAMP" on_update="true"
+                comment="TNW IdealData: auto-updated timestamp for delta-sync"/>
+        <index referenceId="TNW_CSI_UPDATED_AT" indexType="btree">
+            <column name="tnw_updated_at"/>
+        </index>
+    </table>
+
+    <!-- Add tnw_updated_at to inventory_source_item for delta-sync -->
     <table name="inventory_source_item" resource="default">
         <column xsi:type="timestamp" name="tnw_updated_at" nullable="false"
                 default="CURRENT_TIMESTAMP" on_update="true"

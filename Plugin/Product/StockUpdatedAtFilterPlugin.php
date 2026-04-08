@@ -138,40 +138,34 @@ class StockUpdatedAtFilterPlugin
 
         $ids = [];
 
-        // 1. Legacy cataloginventory_stock_item (may not have updated_at)
+        // 1. cataloginventory_stock_item — tnw_updated_at added by this module
         try {
             $legacyTable = $this->resourceConnection->getTableName('cataloginventory_stock_item');
-            if ($connection->isTableExists($legacyTable)
-                && $connection->tableColumnExists($legacyTable, 'updated_at')) {
-                $select = $connection->select()
-                    ->from($legacyTable, ['product_id'])
-                    ->where("updated_at {$sqlOp} ?", $value);
-                $ids = array_map('intval', $connection->fetchCol($select));
-            }
+            $select = $connection->select()
+                ->from($legacyTable, ['product_id'])
+                ->where("tnw_updated_at {$sqlOp} ?", $value);
+            $ids = array_map('intval', $connection->fetchCol($select));
         } catch (\Throwable $e) {
             $this->logger->debug(
-                'TNW_Idealdata: Could not query cataloginventory_stock_item.updated_at',
+                'TNW_Idealdata: Could not query cataloginventory_stock_item.tnw_updated_at',
                 ['exception' => $e->getMessage()]
             );
         }
 
-        // 2. MSI inventory_source_item — uses tnw_updated_at column added by this module
+        // 2. MSI inventory_source_item — tnw_updated_at added by this module
         try {
             $msiTable = $this->resourceConnection->getTableName('inventory_source_item');
-            if ($connection->isTableExists($msiTable)
-                && $connection->tableColumnExists($msiTable, 'tnw_updated_at')) {
-                $productTable = $this->resourceConnection->getTableName('catalog_product_entity');
-                $msiSelect = $connection->select()
-                    ->from(['isi' => $msiTable], [])
-                    ->join(
-                        ['cpe' => $productTable],
-                        'cpe.sku = isi.sku',
-                        ['entity_id']
-                    )
-                    ->where("isi.tnw_updated_at {$sqlOp} ?", $value);
-                $msiIds = array_map('intval', $connection->fetchCol($msiSelect));
-                $ids = array_values(array_unique(array_merge($ids, $msiIds)));
-            }
+            $productTable = $this->resourceConnection->getTableName('catalog_product_entity');
+            $msiSelect = $connection->select()
+                ->from(['isi' => $msiTable], [])
+                ->join(
+                    ['cpe' => $productTable],
+                    'cpe.sku = isi.sku',
+                    ['entity_id']
+                )
+                ->where("isi.tnw_updated_at {$sqlOp} ?", $value);
+            $msiIds = array_map('intval', $connection->fetchCol($msiSelect));
+            $ids = array_values(array_unique(array_merge($ids, $msiIds)));
         } catch (\Throwable $e) {
             $this->logger->debug(
                 'TNW_Idealdata: Could not query inventory_source_item.tnw_updated_at',
