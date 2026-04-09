@@ -3,6 +3,24 @@
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
     <type name="Magento\Customer\Api\CustomerRepositoryInterface">
         <plugin name="tnw_idealdata_customertype_plugin" type="TNW\Idealdata\Plugin\CustomerRepositoryPlugin"/>
+        <plugin name="tnw_idealdata_address_updated_at_filter" type="TNW\Idealdata\Plugin\Customer\AddressUpdatedAtFilterPlugin" sortOrder="20"/>
     </type>
+
+    <!-- Product: stock_item, source_items, manage_stock, stock updated_at filter -->
+    <type name="Magento\Catalog\Api\ProductRepositoryInterface">
+        <plugin name="tnw_idealdata_stock_item" type="TNW\Idealdata\Plugin\Product\StockItemPlugin" sortOrder="10"/>
+        <plugin name="tnw_idealdata_stock_updated_at_filter" type="TNW\Idealdata\Plugin\Product\StockUpdatedAtFilterPlugin" sortOrder="20"/>
+    </type>
+
+    <!-- Cart attributes -->
+    <type name="Magento\Quote\Api\CartRepositoryInterface">
+        <plugin name="tnw_idealdata_cart_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartAttributesPlugin" sortOrder="10"/>
+        <plugin name="tnw_idealdata_cart_item_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartItemAttributesPlugin" sortOrder="20"/>
+    </type>
+
+    <!-- Preferences -->
     <preference for="TNW\Idealdata\Api\OrderStatusRepositoryInterface" type="TNW\Idealdata\Model\OrderStatusRepository"/>
+
+    <preference for="TNW\Idealdata\Api\FailedTransactionRepositoryInterface" type="TNW\Idealdata\Model\FailedTransactionRepository"/>
+    <preference for="TNW\Idealdata\Api\Data\FailedTransactionSearchResultsInterface" type="TNW\Idealdata\Model\Data\FailedTransactionSearchResults"/>
 </config>

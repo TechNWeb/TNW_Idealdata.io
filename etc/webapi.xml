@@ -6,4 +6,12 @@
             <resource ref="Magento_Sales::sales"/>
         </resources>
     </route>
+
+    <!-- Failed transactions -->
+    <route url="/V1/tnw/carts/failed-transactions" method="GET">
+        <service class="TNW\Idealdata\Api\FailedTransactionRepositoryInterface" method="getList"/>
+        <resources>
+            <resource ref="TNW_Idealdata::failed_transactions_read"/>
+        </resources>
+    </route>
 </routes>

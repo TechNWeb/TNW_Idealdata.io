@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="tnw_quote_payment_transaction" resource="default" engine="innodb"
+           comment="TNW IdealData: failed payment attempts per cart">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true"
+                comment="Entity ID"/>
+        <column xsi:type="int" name="quote_id" unsigned="true" nullable="false"
+                comment="Quote ID (FK to quote.entity_id)"/>
+        <column xsi:type="smallint" name="store_id" unsigned="true" nullable="false"
+                comment="Store ID"/>
+        <column xsi:type="varchar" name="transaction_id" nullable="true" length="255"
+                comment="Gateway transaction ID"/>
+        <column xsi:type="varchar" name="status" nullable="false" length="32"
+                comment="declined|failed|error|authorized"/>
+        <column xsi:type="varchar" name="decline_code" nullable="true" length="128"
+                comment="Raw gateway decline code"/>
+        <column xsi:type="varchar" name="decline_reason" nullable="true" length="255"
+                comment="Human-readable decline reason"/>
+        <column xsi:type="varchar" name="decline_category" nullable="true" length="16"
+                comment="hard|soft|technical"/>
+        <column xsi:type="text" name="gateway_message" nullable="true"
+                comment="Sanitized full gateway response"/>
+        <column xsi:type="varchar" name="payment_method" nullable="true" length="128"
+                comment="Payment method code"/>
+        <column xsi:type="varchar" name="card_type" nullable="true" length="32"
+                comment="Card brand"/>
+        <column xsi:type="varchar" name="card_last_four" nullable="true" length="4"
+                comment="Last 4 digits - PCI safe"/>
+        <column xsi:type="smallint" name="card_expiry_month" nullable="true"
+                comment="Card expiry month"/>
+        <column xsi:type="smallint" name="card_expiry_year" nullable="true"
+                comment="Card expiry year"/>
+        <column xsi:type="decimal" name="amount" scale="4" precision="20" nullable="true"
+                comment="Attempted amount"/>
+        <column xsi:type="varchar" name="currency" nullable="true" length="3"
+                comment="ISO 4217 currency code"/>
+        <column xsi:type="int" name="customer_id" unsigned="true" nullable="true"
+                comment="Customer ID (null for guests)"/>
+        <column xsi:type="varchar" name="customer_email" nullable="true" length="255"
+                comment="Customer email"/>
+        <column xsi:type="smallint" name="is_guest" unsigned="true" nullable="false" default="0"
+                comment="1 if guest checkout"/>
+        <column xsi:type="smallint" name="attempt_number" nullable="false" default="1"
+                comment="Attempt number for this cart"/>
+        <column xsi:type="varchar" name="ip_address" nullable="true" length="45"
+                comment="IPv4 or IPv6"/>
+        <column xsi:type="varchar" name="user_agent" nullable="true" length="512"
+                comment="Browser user agent"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP"
+                comment="Created at"/>
+        <column xsi:type="timestamp" name="updated_at" nullable="false" default="CURRENT_TIMESTAMP"
+                on_update="true" comment="Updated at - used for delta-sync"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <index referenceId="TNW_QPT_QUOTE_ID" indexType="btree">
+            <column name="quote_id"/>
+        </index>
+        <index referenceId="TNW_QPT_UPDATED_AT" indexType="btree">
+            <column name="updated_at"/>
+        </index>
+        <index referenceId="TNW_QPT_UPDATED_AT_STATUS" indexType="btree">
+            <column name="updated_at"/>
+            <column name="status"/>
+        </index>
+        <index referenceId="TNW_QPT_CUSTOMER_EMAIL" indexType="btree">
+            <column name="customer_email"/>
+        </index>
+        <index referenceId="TNW_QPT_STORE_UPDATED" indexType="btree">
+            <column name="store_id"/>
+            <column name="updated_at"/>
+        </index>
+    </table>
+
+    <!-- Add tnw_updated_at to inventory_source_item for delta-sync.
+         nullable=true + no default: existing rows stay NULL (not synced until actually changed).
+         on_update=true: MySQL sets CURRENT_TIMESTAMP on any row modification. -->
+    <table name="inventory_source_item" resource="default">
+        <column xsi:type="timestamp" name="tnw_updated_at" nullable="true"
+                on_update="true"
+                comment="TNW IdealData: auto-updated timestamp for delta-sync"/>
+        <index referenceId="TNW_ISI_UPDATED_AT" indexType="btree">
+            <column name="tnw_updated_at"/>
+        </index>
+    </table>
+
+    <!-- Add tnw_updated_at to customer_address_entity for delta-sync.
+         nullable=true + no default: existing rows stay NULL (not synced until actually changed).
+         on_update=true: MySQL sets CURRENT_TIMESTAMP on any row modification. -->
+    <table name="customer_address_entity" resource="default">
+        <column xsi:type="timestamp" name="tnw_updated_at" nullable="true"
+                on_update="true"
+                comment="TNW IdealData: auto-updated timestamp for delta-sync"/>
+        <index referenceId="TNW_CAE_UPDATED_AT" indexType="btree">
+            <column name="tnw_updated_at"/>
+        </index>
+    </table>
+</schema>

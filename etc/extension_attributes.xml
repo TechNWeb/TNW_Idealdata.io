@@ -4,4 +4,32 @@
     <extension_attributes for="Magento\Customer\Api\Data\CustomerInterface">
         <attribute code="customer_type" type="string"/>
     </extension_attributes>
+
+    <!-- Resolved stock configuration on Product (use_config flags applied) -->
+    <extension_attributes for="Magento\Catalog\Api\Data\ProductInterface">
+        <attribute code="manage_stock" type="int"/>
+        <attribute code="out_of_stock_threshold" type="float"/>
+        <attribute code="min_cart_qty" type="float"/>
+        <attribute code="max_cart_qty" type="float"/>
+        <attribute code="qty_uses_decimals" type="int"/>
+        <attribute code="backorders" type="int"/>
+        <attribute code="enable_qty_increments" type="int"/>
+        <attribute code="source_items" type="Magento\InventoryApi\Api\Data\SourceItemInterface[]"/>
+    </extension_attributes>
+
+    <!-- Extra fields on Cart (Quote) -->
+    <extension_attributes for="Magento\Quote\Api\Data\CartInterface">
+        <attribute code="coupon_code" type="string"/>
+        <attribute code="applied_rule_ids" type="string"/>
+        <attribute code="customer_is_guest" type="int"/>
+    </extension_attributes>
+
+    <!-- Extra fields on Cart Item -->
+    <extension_attributes for="Magento\Quote\Api\Data\CartItemInterface">
+        <attribute code="product_id" type="int"/>
+        <attribute code="parent_item_id" type="int"/>
+        <attribute code="product_type" type="string"/>
+        <attribute code="row_total" type="float"/>
+        <attribute code="row_total_with_discount" type="float"/>
+    </extension_attributes>
 </config>
