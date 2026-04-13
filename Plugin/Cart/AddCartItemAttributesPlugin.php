@@ -29,6 +29,14 @@ class AddCartItemAttributesPlugin
         CartRepositoryInterface $subject,
         CartInterface $result
     ): CartInterface {
+        // Only operate in REST/SOAP API contexts. In admin/frontend flows
+        // Magento relies on its native quote-item loading and any interference
+        // (batch-loading items, setItems, setData) can break operations like
+        // "Create Order → Move from cart" where product_id references are lost.
+        if (!$this->isApiContext()) {
+            return $result;
+        }
+
         try {
             $this->ensureItemsLoaded([$result]);
             $this->attachItemAttributes($result);
@@ -49,6 +57,10 @@ class AddCartItemAttributesPlugin
         CartRepositoryInterface $subject,
         CartSearchResultsInterface $result
     ): CartSearchResultsInterface {
+        if (!$this->isApiContext()) {
+            return $result;
+        }
+
         try {
             $carts = $result->getItems();
             if (!empty($carts)) {
@@ -65,6 +77,17 @@ class AddCartItemAttributesPlugin
         }
 
         return $result;
+    }
+
+    private function isApiContext(): bool
+    {
+        try {
+            $areaCode = $this->appState->getAreaCode();
+            return in_array($areaCode, ['webapi_rest', 'webapi_soap'], true);
+        } catch (\Throwable $e) {
+            // Area code not set — treat as non-API context (safer default)
+            return false;
+        }
     }
 
     /**
@@ -89,30 +112,15 @@ class AddCartItemAttributesPlugin
 
         $itemsMap = $this->batchLoadQuoteItems($quoteIdsToLoad);
 
-        // Only apply the setData('items', ...) fix in REST/SOAP API context.
-        // In admin/frontend flows Magento relies on the internal $_items
-        // property (populated via setItems) — overwriting data['items'] there
-        // breaks operations like "Create Order → Move from cart" where Magento
-        // loses product_id references when it resolves items from data array.
-        $isApiContext = false;
-        try {
-            $areaCode = $this->appState->getAreaCode();
-            $isApiContext = in_array($areaCode, ['webapi_rest', 'webapi_soap'], true);
-        } catch (\Throwable $e) {
-            // Area code not set — treat as non-API context (safer default)
-        }
-
         foreach ($carts as $cart) {
             $cartId = (int) $cart->getId();
             if (isset($itemsMap[$cartId])) {
                 $items = $itemsMap[$cartId];
                 $cart->setItems($items);
                 // The REST serializer reads items via getData('items'), not the
-                // internal $_items property. Apply this fix only for API
-                // contexts so inactive carts have items in the REST response.
-                if ($isApiContext) {
-                    $cart->setData('items', $items);
-                }
+                // internal $_items property. Set the data key explicitly so
+                // inactive carts' items appear in the REST response.
+                $cart->setData('items', $items);
             }
         }
     }

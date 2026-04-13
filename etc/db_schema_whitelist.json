@@ -52,5 +52,15 @@
         "index": {
             "TNW_CAE_UPDATED_AT": true
         }
+    },
+    "quote": {
+        "column": {
+            "tnw_parent_quote_id": true,
+            "tnw_parent_quote_created_at": true,
+            "tnw_quote_source": true
+        },
+        "index": {
+            "TNW_QUOTE_PARENT_ID": true
+        }
     }
 }
