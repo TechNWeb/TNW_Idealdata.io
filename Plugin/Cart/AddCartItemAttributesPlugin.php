@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TNW\Idealdata\Plugin\Cart;
 
+use Magento\Framework\App\State;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Api\Data\CartInterface;
 use Magento\Quote\Api\Data\CartItemExtensionFactory;
@@ -16,7 +17,8 @@ class AddCartItemAttributesPlugin
     public function __construct(
         private readonly CartItemExtensionFactory $itemExtensionFactory,
         private readonly QuoteItemCollectionFactory $itemCollectionFactory,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly State $appState
     ) {
     }
 
@@ -76,22 +78,10 @@ class AddCartItemAttributesPlugin
         $quoteIdsToLoad = [];
         foreach ($carts as $cart) {
             $items = $cart->getItems();
-            $this->logger->info(sprintf(
-                'TNW_Idealdata DEBUG ensureItemsLoaded: cart_id=%d items_count=%d getItems_empty=%s getItems_type=%s',
-                (int) $cart->getId(),
-                (int) $cart->getItemsCount(),
-                empty($items) ? 'true' : 'false',
-                is_array($items) ? 'array(' . count($items) . ')' : gettype($items)
-            ));
             if (empty($items) && (int) $cart->getItemsCount() > 0) {
                 $quoteIdsToLoad[] = (int) $cart->getId();
             }
         }
-
-        $this->logger->info(sprintf(
-            'TNW_Idealdata DEBUG ensureItemsLoaded: quoteIdsToLoad=[%s]',
-            implode(',', $quoteIdsToLoad)
-        ));
 
         if (empty($quoteIdsToLoad)) {
             return;
@@ -99,23 +89,30 @@ class AddCartItemAttributesPlugin
 
         $itemsMap = $this->batchLoadQuoteItems($quoteIdsToLoad);
 
+        // Only apply the setData('items', ...) fix in REST/SOAP API context.
+        // In admin/frontend flows Magento relies on the internal $_items
+        // property (populated via setItems) — overwriting data['items'] there
+        // breaks operations like "Create Order → Move from cart" where Magento
+        // loses product_id references when it resolves items from data array.
+        $isApiContext = false;
+        try {
+            $areaCode = $this->appState->getAreaCode();
+            $isApiContext = in_array($areaCode, ['webapi_rest', 'webapi_soap'], true);
+        } catch (\Throwable $e) {
+            // Area code not set — treat as non-API context (safer default)
+        }
+
         foreach ($carts as $cart) {
             $cartId = (int) $cart->getId();
             if (isset($itemsMap[$cartId])) {
                 $items = $itemsMap[$cartId];
                 $cart->setItems($items);
-
-                // Also set via setData to ensure it persists for REST serialization
-                $cart->setData('items', $items);
-
-                // Verify it persisted by re-reading getItems()
-                $verifyItems = $cart->getItems();
-                $this->logger->info(sprintf(
-                    'TNW_Idealdata DEBUG setItems: cart_id=%d set_count=%d after_getItems_count=%s',
-                    $cartId,
-                    count($items),
-                    is_array($verifyItems) ? count($verifyItems) : 'not-array:' . gettype($verifyItems)
-                ));
+                // The REST serializer reads items via getData('items'), not the
+                // internal $_items property. Apply this fix only for API
+                // contexts so inactive carts have items in the REST response.
+                if ($isApiContext) {
+                    $cart->setData('items', $items);
+                }
             }
         }
     }
