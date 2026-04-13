@@ -76,10 +76,22 @@ class AddCartItemAttributesPlugin
         $quoteIdsToLoad = [];
         foreach ($carts as $cart) {
             $items = $cart->getItems();
+            $this->logger->info(sprintf(
+                'TNW_Idealdata DEBUG ensureItemsLoaded: cart_id=%d items_count=%d getItems_empty=%s getItems_type=%s',
+                (int) $cart->getId(),
+                (int) $cart->getItemsCount(),
+                empty($items) ? 'true' : 'false',
+                is_array($items) ? 'array(' . count($items) . ')' : gettype($items)
+            ));
             if (empty($items) && (int) $cart->getItemsCount() > 0) {
                 $quoteIdsToLoad[] = (int) $cart->getId();
             }
         }
+
+        $this->logger->info(sprintf(
+            'TNW_Idealdata DEBUG ensureItemsLoaded: quoteIdsToLoad=[%s]',
+            implode(',', $quoteIdsToLoad)
+        ));
 
         if (empty($quoteIdsToLoad)) {
             return;
@@ -90,7 +102,20 @@ class AddCartItemAttributesPlugin
         foreach ($carts as $cart) {
             $cartId = (int) $cart->getId();
             if (isset($itemsMap[$cartId])) {
-                $cart->setItems($itemsMap[$cartId]);
+                $items = $itemsMap[$cartId];
+                $cart->setItems($items);
+
+                // Also set via setData to ensure it persists for REST serialization
+                $cart->setData('items', $items);
+
+                // Verify it persisted by re-reading getItems()
+                $verifyItems = $cart->getItems();
+                $this->logger->info(sprintf(
+                    'TNW_Idealdata DEBUG setItems: cart_id=%d set_count=%d after_getItems_count=%s',
+                    $cartId,
+                    count($items),
+                    is_array($verifyItems) ? count($verifyItems) : 'not-array:' . gettype($verifyItems)
+                ));
             }
         }
     }
