@@ -26,6 +26,7 @@
         <attribute code="tnw_parent_quote_id" type="int"/>
         <attribute code="tnw_parent_quote_created_at" type="string"/>
         <attribute code="tnw_quote_source" type="string"/>
+        <attribute code="tnw_child_quote_id" type="int"/>
     </extension_attributes>
 
     <!-- Extra fields on Cart Item -->

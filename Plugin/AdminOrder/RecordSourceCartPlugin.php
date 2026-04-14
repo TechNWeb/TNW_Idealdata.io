@@ -16,6 +16,10 @@ use Psr\Log\LoggerInterface;
  *  - tnw_parent_quote_id = Cart A id (when applicable)
  *  - tnw_parent_quote_created_at = Cart A created_at (when applicable)
  *
+ * It also stamps Cart A with tnw_child_quote_id pointing at Cart B, so
+ * IdealData can efficiently detect "drained" Cart A's in the lifecycle
+ * processor and remove them.
+ *
  * IdealData uses these fields to restore the Cart A → Cart B → Order lineage
  * and to compute the correct cart status / time-to-convert.
  */
@@ -44,11 +48,16 @@ class RecordSourceCartPlugin
                 && $customerCart->getId()
                 && (int) $customerCart->getId() !== (int) $orderQuote->getId()
             ) {
+                // Stamp Cart B with parent info
                 $orderQuote->setData('tnw_quote_source', 'admin_split_from_cart');
                 $orderQuote->setData('tnw_parent_quote_id', (int) $customerCart->getId());
                 if ($customerCart->getCreatedAt()) {
                     $orderQuote->setData('tnw_parent_quote_created_at', $customerCart->getCreatedAt());
                 }
+
+                // Stamp Cart A with child info (for lifecycle cleanup detection)
+                $customerCart->setData('tnw_child_quote_id', (int) $orderQuote->getId());
+                $customerCart->save();
             } else {
                 $orderQuote->setData('tnw_quote_source', 'admin_manual');
             }

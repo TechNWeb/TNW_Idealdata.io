@@ -101,6 +101,11 @@ class AddCartAttributesPlugin
             if ($quoteSource !== null && $quoteSource !== '') {
                 $extensionAttributes->setTnwQuoteSource((string) $quoteSource);
             }
+
+            $childQuoteId = $cart->getData('tnw_child_quote_id');
+            if ($childQuoteId !== null && $childQuoteId !== '') {
+                $extensionAttributes->setTnwChildQuoteId((int) $childQuoteId);
+            }
         }
 
         $cart->setExtensionAttributes($extensionAttributes);

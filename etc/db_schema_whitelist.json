@@ -57,7 +57,8 @@
         "column": {
             "tnw_parent_quote_id": true,
             "tnw_parent_quote_created_at": true,
-            "tnw_quote_source": true
+            "tnw_quote_source": true,
+            "tnw_child_quote_id": true
         },
         "index": {
             "TNW_QUOTE_PARENT_ID": true

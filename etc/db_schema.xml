@@ -107,6 +107,8 @@
                 comment="TNW IdealData: parent quote created_at snapshot (for journey time-to-convert calculation)"/>
         <column xsi:type="varchar" name="tnw_quote_source" nullable="true" length="32"
                 comment="TNW IdealData: quote origin (admin_split_from_cart | customer_frontend | reorder | api | admin_manual)"/>
+        <column xsi:type="int" name="tnw_child_quote_id" unsigned="true" nullable="true"
+                comment="TNW IdealData: most recent child quote ID (Cart B) created from this quote via admin move-items"/>
         <index referenceId="TNW_QUOTE_PARENT_ID" indexType="btree">
             <column name="tnw_parent_quote_id"/>
         </index>
