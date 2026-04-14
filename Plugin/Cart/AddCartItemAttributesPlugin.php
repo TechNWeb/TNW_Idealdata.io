@@ -167,24 +167,24 @@ class AddCartItemAttributesPlugin
                 }
 
                 if (method_exists($item, 'getProductId')) {
-                    $extensionAttributes->setProductId((int) $item->getProductId());
+                    $extensionAttributes->setTnwProductId((int) $item->getProductId());
                 }
 
-                $extensionAttributes->setParentItemId(
+                $extensionAttributes->setTnwParentItemId(
                     $item->getParentItemId() ? (int) $item->getParentItemId() : null
                 );
-                $extensionAttributes->setProductType($item->getProductType() ?? '');
+                $extensionAttributes->setTnwProductType($item->getProductType() ?? '');
 
                 if (method_exists($item, 'getRowTotal')) {
-                    $extensionAttributes->setRowTotal((float) $item->getRowTotal());
+                    $extensionAttributes->setTnwRowTotal((float) $item->getRowTotal());
                 }
 
                 if (method_exists($item, 'getRowTotalWithDiscount')) {
-                    $extensionAttributes->setRowTotalWithDiscount(
+                    $extensionAttributes->setTnwRowTotalWithDiscount(
                         (float) $item->getRowTotalWithDiscount()
                     );
                 } elseif (method_exists($item, 'getData')) {
-                    $extensionAttributes->setRowTotalWithDiscount(
+                    $extensionAttributes->setTnwRowTotalWithDiscount(
                         (float) $item->getData('row_total_with_discount')
                     );
                 }
