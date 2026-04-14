@@ -9,30 +9,23 @@ use Magento\Sales\Model\AdminOrder\Create;
 use Psr\Log\LoggerInterface;
 
 /**
- * Records the origin of a quote created during admin order creation.
+ * Detects the origin of an admin-created order by comparing the customer's
+ * active cart (Cart A) items_count before and after createOrder().
  *
- * Three scenarios:
+ * Magento's admin order creation is multi-step: items are moved during
+ * _processActionData() in an earlier request, and by the time createOrder()
+ * runs, the _moveQuoteItems flag is lost. So we use a before/after snapshot
+ * of Cart A's items_count to detect whether items were transferred.
  *
- * 1. "Move items from customer's cart" — admin explicitly transfers items
- *    from the customer's persistent cart (Cart A) into a new quote (Cart B).
- *    Detected via $subject->getMoveQuoteItems(). Cart B gets:
- *      tnw_quote_source       = 'admin_split_from_cart'
- *      tnw_parent_quote_id    = Cart A entity_id
- *      tnw_parent_quote_created_at = Cart A created_at
- *    Cart A gets tnw_child_quote_id = Cart B entity_id (via raw SQL).
+ * Uses aroundCreateOrder to:
+ * 1. Snapshot Cart A items_count BEFORE
+ * 2. Run original createOrder()
+ * 3. Re-read Cart A items_count AFTER
+ * 4. If decreased → admin_split_from_cart + parent/child links
+ *    If origOrderId → reorder
+ *    Otherwise → admin_manual
  *
- * 2. Reorder — admin creates order from an existing order's data.
- *    Detected via $orderQuote->getOrigOrderId(). Cart B gets:
- *      tnw_quote_source = 'reorder'
- *    Cart A is NOT touched.
- *
- * 3. Manual order — admin creates order from scratch for a customer.
- *    Cart B gets:
- *      tnw_quote_source = 'admin_manual'
- *    Cart A is NOT touched.
- *
- * Cart A is updated via raw SQL (not $quote->save()) to avoid triggering
- * collectTotals / observers that interfere with the Cart B → Order conversion.
+ * All quote updates are via raw SQL to avoid side effects (collectTotals etc).
  */
 class RecordSourceCartPlugin
 {
@@ -45,51 +38,99 @@ class RecordSourceCartPlugin
     /**
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
-    public function beforeCreateOrder(Create $subject): void
+    public function aroundCreateOrder(Create $subject, callable $proceed)
     {
+        // ── Snapshot Cart A state BEFORE createOrder ─────────────────────
+        $orderQuote = $subject->getQuote();
+        $customerCart = null;
+        $cartAId = null;
+        $cartAItemsBefore = 0;
+        $cartACreatedAt = null;
+
         try {
-            $orderQuote = $subject->getQuote();
-            if (!$orderQuote || $orderQuote->getData('tnw_quote_source')) {
-                return;
+            $customerCart = $subject->getCustomerCart();
+            if ($customerCart
+                && $customerCart->getId()
+                && $orderQuote
+                && (int) $customerCart->getId() !== (int) $orderQuote->getId()
+            ) {
+                $cartAId = (int) $customerCart->getId();
+                $cartAItemsBefore = (int) $customerCart->getItemsCount();
+                $cartACreatedAt = $customerCart->getCreatedAt();
+            }
+        } catch (\Throwable $e) {
+            // Can't read customer cart — proceed without tracking
+        }
+
+        // ── Run original createOrder ─────────────────────────────────────
+        $result = $proceed();
+
+        // ── Determine source and stamp via raw SQL ───────────────────────
+        try {
+            if (!$orderQuote || !$orderQuote->getId()) {
+                return $result;
             }
 
-            // Scenario 1: items explicitly moved from customer's cart
-            if ($subject->getMoveQuoteItems()) {
-                $customerCart = $subject->getCustomerCart();
-                if ($customerCart
-                    && $customerCart->getId()
-                    && (int) $customerCart->getId() !== (int) $orderQuote->getId()
-                ) {
-                    $orderQuote->setData('tnw_quote_source', 'admin_split_from_cart');
-                    $orderQuote->setData('tnw_parent_quote_id', (int) $customerCart->getId());
-                    if ($customerCart->getCreatedAt()) {
-                        $orderQuote->setData('tnw_parent_quote_created_at', $customerCart->getCreatedAt());
-                    }
+            $connection = $this->resourceConnection->getConnection();
+            $tableName = $this->resourceConnection->getTableName('quote');
+            $quoteId = (int) $orderQuote->getId();
 
-                    // Stamp Cart A with child reference (raw SQL to avoid side effects)
-                    $connection = $this->resourceConnection->getConnection();
-                    $connection->update(
-                        $this->resourceConnection->getTableName('quote'),
-                        ['tnw_child_quote_id' => (int) $orderQuote->getId()],
-                        ['entity_id = ?' => (int) $customerCart->getId()]
-                    );
-                    return;
+            // Check if already set (e.g. by SetQuoteSourceObserver — shouldn't
+            // happen since observer skips adminhtml, but be safe)
+            $existingSource = $connection->fetchOne(
+                "SELECT tnw_quote_source FROM {$tableName} WHERE entity_id = ?",
+                [$quoteId]
+            );
+            if ($existingSource) {
+                return $result;
+            }
+
+            // Scenario 1: reorder
+            if ($orderQuote->getOrigOrderId()) {
+                $connection->update(
+                    $tableName,
+                    ['tnw_quote_source' => 'reorder'],
+                    ['entity_id = ?' => $quoteId]
+                );
+                return $result;
+            }
+
+            // Scenario 2: items moved from customer cart
+            if ($cartAId && $cartAItemsBefore > 0) {
+                $cartAItemsAfter = (int) $connection->fetchOne(
+                    "SELECT items_count FROM {$tableName} WHERE entity_id = ?",
+                    [$cartAId]
+                );
+
+                if ($cartAItemsAfter < $cartAItemsBefore) {
+                    // Cart A lost items → they were moved to Cart B
+                    $connection->update($tableName, [
+                        'tnw_quote_source' => 'admin_split_from_cart',
+                        'tnw_parent_quote_id' => $cartAId,
+                        'tnw_parent_quote_created_at' => $cartACreatedAt
+                    ], ['entity_id = ?' => $quoteId]);
+
+                    $connection->update($tableName, [
+                        'tnw_child_quote_id' => $quoteId
+                    ], ['entity_id = ?' => $cartAId]);
+
+                    return $result;
                 }
             }
 
-            // Scenario 2: reorder
-            if ($orderQuote->getOrigOrderId()) {
-                $orderQuote->setData('tnw_quote_source', 'reorder');
-                return;
-            }
-
-            // Scenario 3: manual admin order
-            $orderQuote->setData('tnw_quote_source', 'admin_manual');
+            // Scenario 3: manual admin order (no items moved, no reorder)
+            $connection->update(
+                $tableName,
+                ['tnw_quote_source' => 'admin_manual'],
+                ['entity_id = ?' => $quoteId]
+            );
         } catch (\Throwable $e) {
             $this->logger->warning(
                 'TNW_Idealdata: Failed to record admin cart source',
                 ['exception' => $e->getMessage()]
             );
         }
+
+        return $result;
     }
 }
