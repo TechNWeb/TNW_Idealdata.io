@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TNW\Idealdata\Plugin\AdminOrder;
 
+use Magento\Framework\App\ResourceConnection;
 use Magento\Sales\Model\AdminOrder\Create;
 use Psr\Log\LoggerInterface;
 
@@ -20,12 +21,14 @@ use Psr\Log\LoggerInterface;
  * IdealData can efficiently detect "drained" Cart A's in the lifecycle
  * processor and remove them.
  *
- * IdealData uses these fields to restore the Cart A → Cart B → Order lineage
- * and to compute the correct cart status / time-to-convert.
+ * IMPORTANT: Cart A is updated via raw SQL (not $quote->save()) to avoid
+ * triggering collectTotals / observers / plugins that can interfere with
+ * the Cart B → Order conversion happening right after this plugin.
  */
 class RecordSourceCartPlugin
 {
     public function __construct(
+        private readonly ResourceConnection $resourceConnection,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -48,16 +51,22 @@ class RecordSourceCartPlugin
                 && $customerCart->getId()
                 && (int) $customerCart->getId() !== (int) $orderQuote->getId()
             ) {
-                // Stamp Cart B with parent info
+                // Stamp Cart B with parent info (saved by Magento during createOrder)
                 $orderQuote->setData('tnw_quote_source', 'admin_split_from_cart');
                 $orderQuote->setData('tnw_parent_quote_id', (int) $customerCart->getId());
                 if ($customerCart->getCreatedAt()) {
                     $orderQuote->setData('tnw_parent_quote_created_at', $customerCart->getCreatedAt());
                 }
 
-                // Stamp Cart A with child info (for lifecycle cleanup detection)
-                $customerCart->setData('tnw_child_quote_id', (int) $orderQuote->getId());
-                $customerCart->save();
+                // Stamp Cart A with child info via raw SQL — avoids triggering
+                // Quote::save() which would call collectTotals/observers and can
+                // break the ongoing Cart B → Order conversion.
+                $connection = $this->resourceConnection->getConnection();
+                $connection->update(
+                    $this->resourceConnection->getTableName('quote'),
+                    ['tnw_child_quote_id' => (int) $orderQuote->getId()],
+                    ['entity_id = ?' => (int) $customerCart->getId()]
+                );
             } else {
                 $orderQuote->setData('tnw_quote_source', 'admin_manual');
             }
