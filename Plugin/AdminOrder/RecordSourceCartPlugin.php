@@ -9,21 +9,30 @@ use Magento\Sales\Model\AdminOrder\Create;
 use Psr\Log\LoggerInterface;
 
 /**
- * When admin creates an order with "Move items from customer's cart", Magento
- * creates a NEW quote (Cart B), moves items from the customer's persistent cart
- * (Cart A), and converts Cart B to the order. This plugin stamps Cart B with:
+ * Records the origin of a quote created during admin order creation.
  *
- *  - tnw_quote_source = 'admin_split_from_cart' | 'admin_manual'
- *  - tnw_parent_quote_id = Cart A id (when applicable)
- *  - tnw_parent_quote_created_at = Cart A created_at (when applicable)
+ * Three scenarios:
  *
- * It also stamps Cart A with tnw_child_quote_id pointing at Cart B, so
- * IdealData can efficiently detect "drained" Cart A's in the lifecycle
- * processor and remove them.
+ * 1. "Move items from customer's cart" — admin explicitly transfers items
+ *    from the customer's persistent cart (Cart A) into a new quote (Cart B).
+ *    Detected via $subject->getMoveQuoteItems(). Cart B gets:
+ *      tnw_quote_source       = 'admin_split_from_cart'
+ *      tnw_parent_quote_id    = Cart A entity_id
+ *      tnw_parent_quote_created_at = Cart A created_at
+ *    Cart A gets tnw_child_quote_id = Cart B entity_id (via raw SQL).
  *
- * IMPORTANT: Cart A is updated via raw SQL (not $quote->save()) to avoid
- * triggering collectTotals / observers / plugins that can interfere with
- * the Cart B → Order conversion happening right after this plugin.
+ * 2. Reorder — admin creates order from an existing order's data.
+ *    Detected via $orderQuote->getOrigOrderId(). Cart B gets:
+ *      tnw_quote_source = 'reorder'
+ *    Cart A is NOT touched.
+ *
+ * 3. Manual order — admin creates order from scratch for a customer.
+ *    Cart B gets:
+ *      tnw_quote_source = 'admin_manual'
+ *    Cart A is NOT touched.
+ *
+ * Cart A is updated via raw SQL (not $quote->save()) to avoid triggering
+ * collectTotals / observers that interfere with the Cart B → Order conversion.
  */
 class RecordSourceCartPlugin
 {
@@ -34,8 +43,6 @@ class RecordSourceCartPlugin
     }
 
     /**
-     * Runs right before Magento converts the admin-built quote into an order.
-     *
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     public function beforeCreateOrder(Create $subject): void
@@ -46,30 +53,38 @@ class RecordSourceCartPlugin
                 return;
             }
 
-            $customerCart = $subject->getCustomerCart();
-            if ($customerCart
-                && $customerCart->getId()
-                && (int) $customerCart->getId() !== (int) $orderQuote->getId()
-            ) {
-                // Stamp Cart B with parent info (saved by Magento during createOrder)
-                $orderQuote->setData('tnw_quote_source', 'admin_split_from_cart');
-                $orderQuote->setData('tnw_parent_quote_id', (int) $customerCart->getId());
-                if ($customerCart->getCreatedAt()) {
-                    $orderQuote->setData('tnw_parent_quote_created_at', $customerCart->getCreatedAt());
-                }
+            // Scenario 1: items explicitly moved from customer's cart
+            if ($subject->getMoveQuoteItems()) {
+                $customerCart = $subject->getCustomerCart();
+                if ($customerCart
+                    && $customerCart->getId()
+                    && (int) $customerCart->getId() !== (int) $orderQuote->getId()
+                ) {
+                    $orderQuote->setData('tnw_quote_source', 'admin_split_from_cart');
+                    $orderQuote->setData('tnw_parent_quote_id', (int) $customerCart->getId());
+                    if ($customerCart->getCreatedAt()) {
+                        $orderQuote->setData('tnw_parent_quote_created_at', $customerCart->getCreatedAt());
+                    }
 
-                // Stamp Cart A with child info via raw SQL — avoids triggering
-                // Quote::save() which would call collectTotals/observers and can
-                // break the ongoing Cart B → Order conversion.
-                $connection = $this->resourceConnection->getConnection();
-                $connection->update(
-                    $this->resourceConnection->getTableName('quote'),
-                    ['tnw_child_quote_id' => (int) $orderQuote->getId()],
-                    ['entity_id = ?' => (int) $customerCart->getId()]
-                );
-            } else {
-                $orderQuote->setData('tnw_quote_source', 'admin_manual');
+                    // Stamp Cart A with child reference (raw SQL to avoid side effects)
+                    $connection = $this->resourceConnection->getConnection();
+                    $connection->update(
+                        $this->resourceConnection->getTableName('quote'),
+                        ['tnw_child_quote_id' => (int) $orderQuote->getId()],
+                        ['entity_id = ?' => (int) $customerCart->getId()]
+                    );
+                    return;
+                }
             }
+
+            // Scenario 2: reorder
+            if ($orderQuote->getOrigOrderId()) {
+                $orderQuote->setData('tnw_quote_source', 'reorder');
+                return;
+            }
+
+            // Scenario 3: manual admin order
+            $orderQuote->setData('tnw_quote_source', 'admin_manual');
         } catch (\Throwable $e) {
             $this->logger->warning(
                 'TNW_Idealdata: Failed to record admin cart source',
