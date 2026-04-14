@@ -85,10 +85,10 @@ class RecordSourceCartPlugin
                 return $result;
             }
 
-            // All raw SQL updates on Cart B include updated_at bump to ensure
-            // the IdealData connector re-fetches the cart with tnw_* values
-            // on the next sync cycle (sync filters by updated_at >= lastSyncTime).
-            $now = date('Y-m-d H:i:s');
+            // All raw SQL updates include updated_at bump to force a re-sync.
+            // Use current time +1s to guarantee the value is AFTER whatever
+            // createOrder() wrote (which just completed inside $proceed).
+            $now = date('Y-m-d H:i:s', time() + 1);
 
             // Scenario 1: reorder
             if ($orderQuote->getOrigOrderId()) {
