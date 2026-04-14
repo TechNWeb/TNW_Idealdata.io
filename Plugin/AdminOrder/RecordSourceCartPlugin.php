@@ -85,13 +85,17 @@ class RecordSourceCartPlugin
                 return $result;
             }
 
+            // All raw SQL updates on Cart B include updated_at bump to ensure
+            // the IdealData connector re-fetches the cart with tnw_* values
+            // on the next sync cycle (sync filters by updated_at >= lastSyncTime).
+            $now = date('Y-m-d H:i:s');
+
             // Scenario 1: reorder
             if ($orderQuote->getOrigOrderId()) {
-                $connection->update(
-                    $tableName,
-                    ['tnw_quote_source' => 'reorder'],
-                    ['entity_id = ?' => $quoteId]
-                );
+                $connection->update($tableName, [
+                    'tnw_quote_source' => 'reorder',
+                    'updated_at' => $now
+                ], ['entity_id = ?' => $quoteId]);
                 return $result;
             }
 
@@ -107,11 +111,13 @@ class RecordSourceCartPlugin
                     $connection->update($tableName, [
                         'tnw_quote_source' => 'admin_split_from_cart',
                         'tnw_parent_quote_id' => $cartAId,
-                        'tnw_parent_quote_created_at' => $cartACreatedAt
+                        'tnw_parent_quote_created_at' => $cartACreatedAt,
+                        'updated_at' => $now
                     ], ['entity_id = ?' => $quoteId]);
 
                     $connection->update($tableName, [
-                        'tnw_child_quote_id' => $quoteId
+                        'tnw_child_quote_id' => $quoteId,
+                        'updated_at' => $now
                     ], ['entity_id = ?' => $cartAId]);
 
                     return $result;
@@ -119,11 +125,10 @@ class RecordSourceCartPlugin
             }
 
             // Scenario 3: manual admin order (no items moved, no reorder)
-            $connection->update(
-                $tableName,
-                ['tnw_quote_source' => 'admin_manual'],
-                ['entity_id = ?' => $quoteId]
-            );
+            $connection->update($tableName, [
+                'tnw_quote_source' => 'admin_manual',
+                'updated_at' => $now
+            ], ['entity_id = ?' => $quoteId]);
         } catch (\Throwable $e) {
             $this->logger->warning(
                 'TNW_Idealdata: Failed to record admin cart source',
