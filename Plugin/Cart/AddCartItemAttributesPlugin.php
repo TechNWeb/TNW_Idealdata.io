@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TNW\Idealdata\Plugin\Cart;
 
+use Magento\Framework\App\State;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Api\Data\CartInterface;
 use Magento\Quote\Api\Data\CartItemExtensionFactory;
@@ -16,7 +17,8 @@ class AddCartItemAttributesPlugin
     public function __construct(
         private readonly CartItemExtensionFactory $itemExtensionFactory,
         private readonly QuoteItemCollectionFactory $itemCollectionFactory,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly State $appState
     ) {
     }
 
@@ -27,6 +29,14 @@ class AddCartItemAttributesPlugin
         CartRepositoryInterface $subject,
         CartInterface $result
     ): CartInterface {
+        // Only operate in REST/SOAP API contexts. In admin/frontend flows
+        // Magento relies on its native quote-item loading and any interference
+        // (batch-loading items, setItems, setData) can break operations like
+        // "Create Order → Move from cart" where product_id references are lost.
+        if (!$this->isApiContext()) {
+            return $result;
+        }
+
         try {
             $this->ensureItemsLoaded([$result]);
             $this->attachItemAttributes($result);
@@ -47,6 +57,10 @@ class AddCartItemAttributesPlugin
         CartRepositoryInterface $subject,
         CartSearchResultsInterface $result
     ): CartSearchResultsInterface {
+        if (!$this->isApiContext()) {
+            return $result;
+        }
+
         try {
             $carts = $result->getItems();
             if (!empty($carts)) {
@@ -63,6 +77,17 @@ class AddCartItemAttributesPlugin
         }
 
         return $result;
+    }
+
+    private function isApiContext(): bool
+    {
+        try {
+            $areaCode = $this->appState->getAreaCode();
+            return in_array($areaCode, ['webapi_rest', 'webapi_soap'], true);
+        } catch (\Throwable $e) {
+            // Area code not set — treat as non-API context (safer default)
+            return false;
+        }
     }
 
     /**
@@ -90,7 +115,12 @@ class AddCartItemAttributesPlugin
         foreach ($carts as $cart) {
             $cartId = (int) $cart->getId();
             if (isset($itemsMap[$cartId])) {
-                $cart->setItems($itemsMap[$cartId]);
+                $items = $itemsMap[$cartId];
+                $cart->setItems($items);
+                // The REST serializer reads items via getData('items'), not the
+                // internal $_items property. Set the data key explicitly so
+                // inactive carts' items appear in the REST response.
+                $cart->setData('items', $items);
             }
         }
     }
@@ -137,24 +167,24 @@ class AddCartItemAttributesPlugin
                 }
 
                 if (method_exists($item, 'getProductId')) {
-                    $extensionAttributes->setProductId((int) $item->getProductId());
+                    $extensionAttributes->setTnwProductId((int) $item->getProductId());
                 }
 
-                $extensionAttributes->setParentItemId(
+                $extensionAttributes->setTnwParentItemId(
                     $item->getParentItemId() ? (int) $item->getParentItemId() : null
                 );
-                $extensionAttributes->setProductType($item->getProductType() ?? '');
+                $extensionAttributes->setTnwProductType($item->getProductType() ?? '');
 
                 if (method_exists($item, 'getRowTotal')) {
-                    $extensionAttributes->setRowTotal((float) $item->getRowTotal());
+                    $extensionAttributes->setTnwRowTotal((float) $item->getRowTotal());
                 }
 
                 if (method_exists($item, 'getRowTotalWithDiscount')) {
-                    $extensionAttributes->setRowTotalWithDiscount(
+                    $extensionAttributes->setTnwRowTotalWithDiscount(
                         (float) $item->getRowTotalWithDiscount()
                     );
                 } elseif (method_exists($item, 'getData')) {
-                    $extensionAttributes->setRowTotalWithDiscount(
+                    $extensionAttributes->setTnwRowTotalWithDiscount(
                         (float) $item->getData('row_total_with_discount')
                     );
                 }

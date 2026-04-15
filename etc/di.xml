@@ -18,6 +18,11 @@
         <plugin name="tnw_idealdata_cart_item_attributes" type="TNW\Idealdata\Plugin\Cart\AddCartItemAttributesPlugin" sortOrder="20"/>
     </type>
 
+    <!-- Admin order creation: record source cart (Cart A → Cart B lineage) -->
+    <type name="Magento\Sales\Model\AdminOrder\Create">
+        <plugin name="tnw_idealdata_record_source_cart" type="TNW\Idealdata\Plugin\AdminOrder\RecordSourceCartPlugin" sortOrder="10"/>
+    </type>
+
     <!-- Preferences -->
     <preference for="TNW\Idealdata\Api\OrderStatusRepositoryInterface" type="TNW\Idealdata\Model\OrderStatusRepository"/>
 

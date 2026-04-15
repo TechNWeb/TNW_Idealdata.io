@@ -22,14 +22,20 @@
         <attribute code="coupon_code" type="string"/>
         <attribute code="applied_rule_ids" type="string"/>
         <attribute code="customer_is_guest" type="int"/>
+        <!-- Cart parent tracking: set on the quote created by admin "move items from cart" flow -->
+        <attribute code="tnw_parent_quote_id" type="int"/>
+        <attribute code="tnw_parent_quote_created_at" type="string"/>
+        <attribute code="tnw_quote_source" type="string"/>
+        <attribute code="tnw_child_quote_id" type="int"/>
     </extension_attributes>
 
-    <!-- Extra fields on Cart Item -->
+    <!-- Extra fields on Cart Item (tnw_ prefixed to avoid collision with
+         Magento's magic getters on Quote\Item — see getAttributeValueFromExtensibleObject) -->
     <extension_attributes for="Magento\Quote\Api\Data\CartItemInterface">
-        <attribute code="product_id" type="int"/>
-        <attribute code="parent_item_id" type="int"/>
-        <attribute code="product_type" type="string"/>
-        <attribute code="row_total" type="float"/>
-        <attribute code="row_total_with_discount" type="float"/>
+        <attribute code="tnw_product_id" type="int"/>
+        <attribute code="tnw_parent_item_id" type="int"/>
+        <attribute code="tnw_product_type" type="string"/>
+        <attribute code="tnw_row_total" type="float"/>
+        <attribute code="tnw_row_total_with_discount" type="float"/>
     </extension_attributes>
 </config>

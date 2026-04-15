@@ -85,6 +85,29 @@ class AddCartAttributesPlugin
             $extensionAttributes->setCustomerIsGuest((int) $cart->getData('customer_is_guest'));
         }
 
+        // Cart parent tracking (populated for admin "move items from cart" flow)
+        if (method_exists($cart, 'getData')) {
+            $parentQuoteId = $cart->getData('tnw_parent_quote_id');
+            if ($parentQuoteId !== null && $parentQuoteId !== '') {
+                $extensionAttributes->setTnwParentQuoteId((int) $parentQuoteId);
+            }
+
+            $parentQuoteCreatedAt = $cart->getData('tnw_parent_quote_created_at');
+            if ($parentQuoteCreatedAt !== null && $parentQuoteCreatedAt !== '') {
+                $extensionAttributes->setTnwParentQuoteCreatedAt((string) $parentQuoteCreatedAt);
+            }
+
+            $quoteSource = $cart->getData('tnw_quote_source');
+            if ($quoteSource !== null && $quoteSource !== '') {
+                $extensionAttributes->setTnwQuoteSource((string) $quoteSource);
+            }
+
+            $childQuoteId = $cart->getData('tnw_child_quote_id');
+            if ($childQuoteId !== null && $childQuoteId !== '') {
+                $extensionAttributes->setTnwChildQuoteId((int) $childQuoteId);
+            }
+        }
+
         $cart->setExtensionAttributes($extensionAttributes);
     }
 }

@@ -96,4 +96,21 @@
             <column name="tnw_updated_at"/>
         </index>
     </table>
+
+    <!-- Cart parent tracking: added to quote to record origin of a cart.
+         Used by IdealData to differentiate Cart A (persistent customer cart)
+         from Cart B (transient admin-split cart that becomes an order). -->
+    <table name="quote" resource="checkout">
+        <column xsi:type="int" name="tnw_parent_quote_id" unsigned="true" nullable="true"
+                comment="TNW IdealData: parent quote ID (Cart A) when this quote was created by admin 'move items from cart' flow"/>
+        <column xsi:type="timestamp" name="tnw_parent_quote_created_at" nullable="true"
+                comment="TNW IdealData: parent quote created_at snapshot (for journey time-to-convert calculation)"/>
+        <column xsi:type="varchar" name="tnw_quote_source" nullable="true" length="32"
+                comment="TNW IdealData: quote origin (admin_split_from_cart | customer_frontend | reorder | api | admin_manual)"/>
+        <column xsi:type="int" name="tnw_child_quote_id" unsigned="true" nullable="true"
+                comment="TNW IdealData: most recent child quote ID (Cart B) created from this quote via admin move-items"/>
+        <index referenceId="TNW_QUOTE_PARENT_ID" indexType="btree">
+            <column name="tnw_parent_quote_id"/>
+        </index>
+    </table>
 </schema>
