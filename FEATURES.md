@@ -1,290 +1,291 @@
-# TNW_Idealdata — обзор модуля и реализованных функций
+# TNW_Idealdata — Module Overview & Implemented Features
 
-Модуль `TNW_Idealdata` (composer: `tnw/module-idealdata`, версия 1.3) расширяет
-стандартный REST/SOAP API Adobe Commerce (Magento 2) дополнительными данными,
-необходимыми для интеграции с CRM-платформой **IdealData.io**. Модуль
-преимущественно read-only с точки зрения публичного API и фокусируется на:
+The `TNW_Idealdata` module (composer: `tnw/module-idealdata`, version 1.3)
+extends the standard Adobe Commerce (Magento 2) REST/SOAP API with additional
+data required for integration with the **IdealData.io** CRM platform. The module
+is largely read-only from the public-API standpoint and focuses on:
 
-- обогащении сущностей (Product, Customer, Cart, CartItem) дополнительными полями;
-- delta-sync — корректной отдаче сущностей, у которых изменились "связанные" таблицы (stock, address);
-- сборе данных о неуспешных платежах (failed transactions);
-- трекинге происхождения корзин (Cart A → Cart B lineage) для admin-флоу;
-- предоставлении REST endpoints для статусов заказов и failed-transactions;
-- adminhtml UI для онбординга/поддержки.
+- enriching entities (Product, Customer, Cart, CartItem) with extra fields;
+- delta-sync — correctly returning entities whose "related" tables (stock, address) have changed;
+- collecting data on failed payment transactions;
+- tracking cart origin (Cart A → Cart B lineage) for admin flows;
+- exposing REST endpoints for order statuses and failed transactions;
+- providing an adminhtml UI for onboarding/support.
 
-Целевая версия Magento Framework: `>=103.0.6` (Magento 2.4.x).
-Зависимости: `Magento_Catalog`, `Magento_CatalogInventory`, `Magento_InventoryApi`,
+Target Magento Framework version: `>=103.0.6` (Magento 2.4.x).
+Dependencies: `Magento_Catalog`, `Magento_CatalogInventory`, `Magento_InventoryApi`,
 `Magento_Customer`, `Magento_Quote`, `Magento_Sales`, `Magento_Payment`, `TNW_Marketing`.
 
 ---
 
-## 1. Реализованные функции
+## 1. Implemented Features
 
-### 1.1. Определение типа клиента (B2B vs B2C)
+### 1.1. Customer Type Detection (B2B vs B2C)
 
-**Файлы:** `Plugin/CustomerRepositoryPlugin.php`, `etc/extension_attributes.xml`
+**Files:** `Plugin/CustomerRepositoryPlugin.php`, `etc/extension_attributes.xml`
 
-Добавляется extension attribute `customer_type` (string) к
+Adds the `customer_type` extension attribute (string) to
 `Magento\Customer\Api\Data\CustomerInterface`.
 
-Логика определения (приоритеты):
-1. Если установлен модуль `Magento_Company` и `CompanyManagementInterface::getByCustomerId()` возвращает компанию → `company_user`.
-2. Если у клиента есть кастомный атрибут `company` с непустым значением → `company_user`.
-3. Если у дефолтного billing-адреса заполнено поле `company` → `company_user`.
-4. Иначе → `individual_user`.
+Detection logic (priority order):
+1. If `Magento_Company` is installed and `CompanyManagementInterface::getByCustomerId()` returns a company → `company_user`.
+2. If the customer has a custom `company` attribute with a non-empty value → `company_user`.
+3. If the default billing address has a non-empty `company` field → `company_user`.
+4. Otherwise → `individual_user`.
 
-Активируется через `afterGetList` на `Magento\Customer\Api\CustomerRepositoryInterface`.
+Wired in via `afterGetList` on `Magento\Customer\Api\CustomerRepositoryInterface`.
 
-### 1.2. REST endpoint: статусы заказов
+### 1.2. REST endpoint: order statuses
 
-**Файлы:** `Api/OrderStatusRepositoryInterface.php`, `Api/Data/OrderStatusInterface.php`,
+**Files:** `Api/OrderStatusRepositoryInterface.php`, `Api/Data/OrderStatusInterface.php`,
 `Model/OrderStatusRepository.php`, `Model/OrderStatus.php`, `etc/webapi.xml`
 
-`GET /V1/order/status` — возвращает все статусы заказов с человекочитаемыми
-лейблами и связанным state (`new`, `processing`, …).
+`GET /V1/order/status` — returns all order statuses with human-readable
+labels and the associated state (`new`, `processing`, …).
 ACL: `Magento_Sales::sales`.
 
-Источник данных — `Magento\Sales\Model\ResourceModel\Order\Status\CollectionFactory`
-с `joinStates()`.
+Data source: `Magento\Sales\Model\ResourceModel\Order\Status\CollectionFactory`
+with `joinStates()`.
 
-### 1.3. Захват неуспешных платежных транзакций
+### 1.3. Failed payment transaction capture
 
-**Файлы:** `Observer/CaptureFailedPaymentObserver.php`, `etc/events.xml`,
-`etc/db_schema.xml` (таблица `tnw_quote_payment_transaction`).
+**Files:** `Observer/CaptureFailedPaymentObserver.php`, `etc/events.xml`,
+`etc/db_schema.xml` (table `tnw_quote_payment_transaction`).
 
-Observer на событии `sales_order_payment_place_end` пишет в новую таблицу
-`tnw_quote_payment_transaction` запись о неуспешной попытке оплаты.
+An observer on `sales_order_payment_place_end` writes a record into the new
+`tnw_quote_payment_transaction` table for each failed payment attempt.
 
-Что именно фиксируется:
-- идентификаторы: quote_id, store_id, transaction_id, customer_id, customer_email;
-- статус (`declined` / `failed` / `error`);
-- decline_code (raw из шлюза), decline_reason (текст), decline_category (`hard` / `soft` / `technical`);
-- gateway_message — sanitized JSON всего `additionalInformation` (вырезаны `cc_number`, `cc_cid`, `cc_ss_*`, `card_number`, `cvv`, `cvc`, `pan`);
+What gets captured:
+- identifiers: quote_id, store_id, transaction_id, customer_id, customer_email;
+- status (`declined` / `failed` / `error`);
+- decline_code (raw from the gateway), decline_reason (text), decline_category (`hard` / `soft` / `technical`);
+- gateway_message — sanitized JSON of the entire `additionalInformation` (`cc_number`, `cc_cid`, `cc_ss_*`, `card_number`, `cvv`, `cvc`, `pan` are stripped);
 - payment_method, card_type, card_last_four, card_expiry_month/year (PCI-safe);
-- сумма + ISO 4217 валюта;
-- IP, user-agent, признак гостя, attempt_number (увеличивающийся per-quote);
-- created_at + updated_at (auto-update для delta-sync).
+- amount + ISO 4217 currency;
+- IP, user-agent, guest flag, attempt_number (incremented per quote);
+- created_at + updated_at (auto-updated for delta-sync).
 
-Признаки, по которым транзакция считается failed:
+Failure detection signals:
 - TxnType = `void`;
 - `additional_information.is_transaction_declined === true`;
 - `additional_information.is_transaction_denied === true`;
-- транзакция закрыта и `transaction_status === 'declined'`.
+- transaction is closed AND `transaction_status === 'declined'`.
 
-Категоризация decline_code:
+decline_code categorization:
 - **hard**: `do_not_honor`, `pickup_card`, `lost_card`, `stolen_card`, `restricted_card`, `security_violation`, `transaction_not_allowed`, `blocked`, `revocation_of_authorization`;
 - **technical**: `gateway_timeout`, `network_error`, `processor_unavailable`, `system_error`, `service_unavailable`, `timeout`, `unknown_error`;
-- иначе — **soft**.
+- otherwise → **soft**.
 
 ### 1.4. REST endpoint: failed transactions
 
-**Файлы:** `Api/FailedTransactionRepositoryInterface.php`,
+**Files:** `Api/FailedTransactionRepositoryInterface.php`,
 `Api/Data/FailedTransactionResultInterface.php`, `Api/Data/TransactionDataInterface.php`,
 `Api/Data/CartSnapshotInterface.php`, `Api/Data/CartItemSnapshotInterface.php`,
 `Api/Data/CustomerSnapshotInterface.php`,
 `Api/Data/FailedTransactionSearchResultsInterface.php`,
 `Model/FailedTransactionRepository.php`, `Model/Data/*`, `etc/acl.xml`, `etc/webapi.xml`.
 
-`GET /V1/tnw/carts/failed-transactions` возвращает список failed-транзакций
-с прикреплённым snapshot корзины, items и клиента.
+`GET /V1/tnw/carts/failed-transactions` returns a paginated list of failed
+transactions, each enriched with snapshots of the cart, its items and the customer.
 
-Параметры:
-- `updated_at_from` (обязательно, ISO 8601);
-- `updated_at_to`, `status` (`declined|failed|error`), `store_id`, `is_guest` (опционально);
+Parameters:
+- `updated_at_from` (required, ISO 8601);
+- `updated_at_to`, `status` (`declined|failed|error`), `store_id`, `is_guest` (optional);
 - `pageSize` (default 100, max 500), `currentPage` (default 1).
 
 ACL: `TNW_Idealdata::failed_transactions_read`.
 
-Реализация — нативные `select()` на `ResourceConnection` с агрегированной выборкой:
-один COUNT, один основной SELECT с `LIMIT/OFFSET` и три batch-SELECT-а
-(quotes, quote_items, customers) для сборки snapshot-ов. В ответе помимо
-`items` и `total_count` возвращается `page_info` (`page_size`, `current_page`, `total_pages`).
+Implementation — direct `select()` calls on `ResourceConnection` with an
+aggregated query plan: one COUNT, one main SELECT with `LIMIT/OFFSET`, plus
+three batch SELECTs (quotes, quote_items, customers) used to assemble the
+snapshots. The response includes `items` and `total_count` plus a `page_info`
+block (`page_size`, `current_page`, `total_pages`).
 
-### 1.5. Обогащение Product stock-данными
+### 1.5. Product stock-data enrichment
 
-**Файлы:** `Plugin/Product/StockItemPlugin.php`, `etc/extension_attributes.xml`, `etc/di.xml`
+**Files:** `Plugin/Product/StockItemPlugin.php`, `etc/extension_attributes.xml`, `etc/di.xml`
 
-К `Magento\Catalog\Api\Data\ProductInterface` добавляются extension attributes:
+Adds the following extension attributes to `Magento\Catalog\Api\Data\ProductInterface`:
 
-| Attribute | Описание |
+| Attribute | Description |
 |---|---|
-| `manage_stock` (int) | резолвленное значение с учётом `use_config_*` |
-| `out_of_stock_threshold` (float) | min_qty (резолвленное) |
-| `min_cart_qty` (float) | min_sale_qty (резолвленное) |
-| `max_cart_qty` (float) | max_sale_qty (резолвленное) |
+| `manage_stock` (int) | resolved value taking `use_config_*` flags into account |
+| `out_of_stock_threshold` (float) | resolved min_qty |
+| `min_cart_qty` (float) | resolved min_sale_qty |
+| `max_cart_qty` (float) | resolved max_sale_qty |
 | `qty_uses_decimals` (int) | is_qty_decimal |
-| `backorders` (int) | резолвленное |
-| `enable_qty_increments` (int) | резолвленное |
-| `source_items` (`SourceItemInterface[]`) | строки из `inventory_source_item` |
+| `backorders` (int) | resolved |
+| `enable_qty_increments` (int) | resolved |
+| `source_items` (`SourceItemInterface[]`) | rows from `inventory_source_item` |
 
-Plugin срабатывает на `afterGet` и `afterGetList` `ProductRepositoryInterface`
-и **batch-загружает** stock_items + source_items за **2 SQL-запроса** на любой объём
-продуктов. Системные дефолты `cataloginventory/item_options/*` кешируются в памяти
-запроса.
+The plugin runs on `afterGet` and `afterGetList` of `ProductRepositoryInterface`
+and **batch-loads** stock_items + source_items in **2 SQL queries total**,
+regardless of how many products are returned. System defaults
+(`cataloginventory/item_options/*`) are cached in request memory.
 
-### 1.6. Delta-sync: продукты с изменившимся stock
+### 1.6. Delta-sync: products with changed stock
 
-**Файлы:** `Plugin/Product/StockUpdatedAtFilterPlugin.php`, `etc/db_schema.xml`
+**Files:** `Plugin/Product/StockUpdatedAtFilterPlugin.php`, `etc/db_schema.xml`
 
-В таблицу `inventory_source_item` добавлен столбец `tnw_updated_at` (timestamp,
-nullable, `on_update=true`) с индексом — MySQL автоматически обновляет его при
-любой модификации строки.
+A `tnw_updated_at` column (timestamp, nullable, `on_update=true`) is added to
+`inventory_source_item` together with an index — MySQL automatically refreshes
+the column on any row modification.
 
-Plugin перехватывает фильтр `updated_at` на `GET /V1/products` и **дополняет**
-выдачу продуктами, у которых:
-- `inventory_source_item.tnw_updated_at` удовлетворяет условию,
-- НО `catalog_product_entity.updated_at` НЕ удовлетворяет (т.е. stock изменился, а сам продукт нет).
+The plugin intercepts the `updated_at` filter on `GET /V1/products` and
+**augments** the result set with products where:
+- `inventory_source_item.tnw_updated_at` matches the filter,
+- BUT `catalog_product_entity.updated_at` does NOT (i.e. stock changed but the product itself didn't).
 
-Особенности:
-- Пагинация целиком на уровне SQL (LIMIT/OFFSET) — никаких массивов всех ID в PHP;
-- Дочитка отсутствующих продуктов через 1 batch-`getList` (с recursion guard `isInternalCall`), что также триггерит `StockItemPlugin::afterGetList`;
-- `total_count` суммируется с native;
-- Поддержка операторов `gteq|lteq|gt|lt|eq|neq`.
+Highlights:
+- Pagination is fully SQL-based (LIMIT/OFFSET) — no in-memory ID arrays;
+- Missing products are loaded via a single batch `getList` call (with a `isInternalCall` recursion guard), which also triggers `StockItemPlugin::afterGetList`;
+- `total_count` is summed with the native total;
+- Operators supported: `gteq|lteq|gt|lt|eq|neq`.
 
-### 1.7. Delta-sync: клиенты с изменившимся адресом
+### 1.7. Delta-sync: customers with changed addresses
 
-**Файлы:** `Plugin/Customer/AddressUpdatedAtFilterPlugin.php`, `etc/db_schema.xml`
+**Files:** `Plugin/Customer/AddressUpdatedAtFilterPlugin.php`, `etc/db_schema.xml`
 
-Симметрично `StockUpdatedAtFilterPlugin`, но для адресов: в `customer_address_entity`
-добавлен `tnw_updated_at`. Перехватывает `GET /V1/customers/search` с фильтром
-`updated_at` и доклеивает клиентов, у которых менялся адрес, но сам customer — нет.
+Symmetric to `StockUpdatedAtFilterPlugin`, but for addresses: a `tnw_updated_at`
+column is added to `customer_address_entity`. The plugin intercepts
+`GET /V1/customers/search` filtered by `updated_at` and appends customers
+whose address changed but whose own row did not. Same architecture:
 SQL-pagination, batch getList, recursion guard.
 
-### 1.8. Дополнительные атрибуты Cart (Quote)
+### 1.8. Cart (Quote) extension attributes
 
-**Файлы:** `Plugin/Cart/AddCartAttributesPlugin.php`, `etc/extension_attributes.xml`
+**Files:** `Plugin/Cart/AddCartAttributesPlugin.php`, `etc/extension_attributes.xml`
 
-К `Magento\Quote\Api\Data\CartInterface` добавлены extension attributes:
+Adds the following extension attributes to `Magento\Quote\Api\Data\CartInterface`:
 
 - `coupon_code` (string)
 - `applied_rule_ids` (string)
 - `customer_is_guest` (int)
 - `tnw_parent_quote_id` (int) — Cart A
 - `tnw_parent_quote_created_at` (string)
-- `tnw_quote_source` (string) — см. §1.10
+- `tnw_quote_source` (string) — see §1.10
 - `tnw_child_quote_id` (int) — Cart B
 
-Активируется на `afterGet` и `afterGetList` `CartRepositoryInterface`.
+Activated via `afterGet` and `afterGetList` of `CartRepositoryInterface`.
 
-### 1.9. Дополнительные атрибуты Cart Item
+### 1.9. Cart Item extension attributes
 
-**Файлы:** `Plugin/Cart/AddCartItemAttributesPlugin.php`, `etc/extension_attributes.xml`
+**Files:** `Plugin/Cart/AddCartItemAttributesPlugin.php`, `etc/extension_attributes.xml`
 
-К `Magento\Quote\Api\Data\CartItemInterface` добавлены атрибуты с префиксом `tnw_`
-во избежание коллизий с магической геттерной логикой `Quote\Item`:
+Adds the following attributes to `Magento\Quote\Api\Data\CartItemInterface`,
+all prefixed with `tnw_` to avoid collisions with `Quote\Item`'s magic-getter logic:
 
 - `tnw_product_id`, `tnw_parent_item_id`, `tnw_product_type`,
 - `tnw_row_total`, `tnw_row_total_with_discount`.
 
-Plugin **работает только в API-контексте** (`webapi_rest`/`webapi_soap`) — это
-сознательное ограничение, чтобы не ломать admin/frontend-флоу
-("Create Order → Move from cart"). При `getList` элементы корзин подгружаются
-одним запросом для всех корзин (batch). Дополнительно делается
-`setData('items', ...)` — чтобы REST-сериализатор увидел items для неактивных
-корзин (идущих не через `$_items`).
+The plugin **only operates in API context** (`webapi_rest`/`webapi_soap`) — this
+is a deliberate restriction to avoid breaking admin/frontend flows
+("Create Order → Move from cart"). On `getList`, items for all carts are
+loaded in a single batch SQL query. Additionally, `setData('items', ...)` is
+called explicitly so that the REST serializer picks up items for inactive
+carts (which don't go through `$_items`).
 
-### 1.10. Трекинг происхождения корзин (Cart A → Cart B lineage)
+### 1.10. Cart lineage tracking (Cart A → Cart B)
 
-**Файлы:** `Plugin/AdminOrder/RecordSourceCartPlugin.php`,
+**Files:** `Plugin/AdminOrder/RecordSourceCartPlugin.php`,
 `Observer/SetQuoteSourceObserver.php`, `etc/db_schema.xml`, `etc/events.xml`, `etc/di.xml`
 
-В `quote` добавлены столбцы: `tnw_parent_quote_id`, `tnw_parent_quote_created_at`,
-`tnw_quote_source`, `tnw_child_quote_id` (+ индекс).
+The `quote` table gains the columns `tnw_parent_quote_id`,
+`tnw_parent_quote_created_at`, `tnw_quote_source`, `tnw_child_quote_id`
+(plus an index).
 
-Возможные значения `tnw_quote_source`:
-| Значение | Когда выставляется |
+Possible values of `tnw_quote_source`:
+| Value | When it is set |
 |---|---|
-| `customer_frontend` | обычная фронтовая отправка заказа |
-| `api` | submit через webapi |
-| `reorder` | при наличии `orig_order_id` |
-| `admin_split_from_cart` | админ создал заказ, переместив товары из активной корзины клиента (Cart A) в новую корзину (Cart B) |
-| `admin_manual` | админ создал заказ вручную, без переноса из корзины |
+| `customer_frontend` | normal frontend order submission |
+| `api` | submission via webapi |
+| `reorder` | when `orig_order_id` is present |
+| `admin_split_from_cart` | admin created an order by moving items from the customer's active cart (Cart A) into a new cart (Cart B) |
+| `admin_manual` | admin built the order manually, no items moved from a cart |
 
 #### `SetQuoteSourceObserver` (event `sales_model_service_quote_submit_before`)
 
-Выставляет `tnw_quote_source` для НЕ-admin-контекстов (`reorder` / `api` /
-`customer_frontend`). Для admin-контекста явно ничего не делает —
-обработка идёт в `RecordSourceCartPlugin`.
+Sets `tnw_quote_source` for non-admin contexts (`reorder` / `api` /
+`customer_frontend`). Admin context is intentionally skipped — it is handled
+by `RecordSourceCartPlugin`.
 
 #### `RecordSourceCartPlugin::aroundCreateOrder` (`Magento\Sales\Model\AdminOrder\Create`)
 
-Используется around-плагин:
-1. **Перед** вызовом оригинального `createOrder()`: снимок `items_count` Cart A (customer cart);
-2. **После**: чтение `items_count` ещё раз;
-3. **Решение**:
-   - `getOrigOrderId()` → `reorder`;
-   - cart A items_count *уменьшился* → `admin_split_from_cart`, проставляются
-     `tnw_parent_quote_id`/`tnw_parent_quote_created_at` на Cart B и
-     `tnw_child_quote_id` на Cart A;
-   - иначе → `admin_manual`.
+Implemented as an around-plugin:
+1. **Before** the original `createOrder()` runs: snapshot `items_count` of Cart A (customer cart).
+2. **After**: read `items_count` again.
+3. **Decision tree**:
+   - `getOrigOrderId()` is set → `reorder`;
+   - Cart A items_count *decreased* → `admin_split_from_cart`; Cart B is stamped with `tnw_parent_quote_id` / `tnw_parent_quote_created_at`, Cart A is stamped with `tnw_child_quote_id`;
+   - otherwise → `admin_manual`.
 
-Все апдейты делаются **сырым SQL** (`$connection->update()`), чтобы избежать
-побочных эффектов collectTotals / save. `updated_at` принудительно
-сдвигается на `now + 1s`, чтобы delta-sync гарантированно увидел изменение
-(после createOrder Magento мог только что обновить эту строку).
+All updates are issued as **raw SQL** (`$connection->update()`) to avoid the
+side effects of collectTotals / save. `updated_at` is forcibly set to
+`now + 1s` so that delta-sync is guaranteed to pick up the change (Magento
+may have just written the row inside `createOrder()`).
 
-### 1.11. Adminhtml-UI
+### 1.11. Adminhtml UI
 
-**Файлы:** `etc/adminhtml/system.xml`, `etc/acl.xml`, `Block/Adminhtml/System/Config/{Intro,Onboarding,Support}.php`,
+**Files:** `etc/adminhtml/system.xml`, `etc/acl.xml`, `Block/Adminhtml/System/Config/{Intro,Onboarding,Support}.php`,
 `view/adminhtml/templates/system/config/*.phtml`, `view/adminhtml/web/css/idealdata.css`,
 `view/adminhtml/layout/adminhtml_system_config_edit.xml`, `view/adminhtml/web/images/idealdata-logo.png`.
 
-В админке появляется отдельная вкладка **IDEALDATA.IO** в System → Configuration
-с тремя секциями (collapsible):
-- **Introduction** — маркетинговый блок с описанием и кнопкой «Request a Quote»;
-- **Onboarding** — кнопка «Request Onboarding»;
-- **Support** — кнопка «Open a ticket».
+A dedicated **IDEALDATA.IO** tab appears in System → Configuration with three
+collapsible sections:
+- **Introduction** — marketing block with a "Request a Quote" button;
+- **Onboarding** — "Request Onboarding" button;
+- **Support** — "Open a ticket" button.
 
-CSS отображает кастомный логотип в навигации, JS-функции toggle секций встроены
-в шаблоны. ACL: `TNW_Idealdata::config`.
+CSS renders a custom logo in the navigation; per-section toggle JS is inlined
+into each template. ACL: `TNW_Idealdata::config`.
 
-### 1.12. Изменения схемы БД
+### 1.12. DB schema changes
 
-| Таблица | Изменение |
+| Table | Change |
 |---|---|
-| `tnw_quote_payment_transaction` | НОВАЯ. 24 столбца, 5 индексов (по `quote_id`, `updated_at`, `(updated_at, status)`, `customer_email`, `(store_id, updated_at)`) |
-| `inventory_source_item` | + `tnw_updated_at` (timestamp, nullable, on_update) + индекс |
-| `customer_address_entity` | + `tnw_updated_at` (timestamp, nullable, on_update) + индекс |
-| `quote` | + `tnw_parent_quote_id` (+ индекс), `tnw_parent_quote_created_at`, `tnw_quote_source`, `tnw_child_quote_id` |
+| `tnw_quote_payment_transaction` | NEW. 24 columns, 5 indexes (on `quote_id`, `updated_at`, `(updated_at, status)`, `customer_email`, `(store_id, updated_at)`) |
+| `inventory_source_item` | + `tnw_updated_at` (timestamp, nullable, on_update) + index |
+| `customer_address_entity` | + `tnw_updated_at` (timestamp, nullable, on_update) + index |
+| `quote` | + `tnw_parent_quote_id` (+ index), `tnw_parent_quote_created_at`, `tnw_quote_source`, `tnw_child_quote_id` |
 
-`db_schema_whitelist.json` синхронизирован.
+`db_schema_whitelist.json` is in sync.
 
-### 1.13. ACL ресурсы
+### 1.13. ACL resources
 
-| ID | Назначение |
+| ID | Purpose |
 |---|---|
-| `TNW_Idealdata::config` | доступ к секции конфигурации в админке |
-| `TNW_Idealdata::failed_transactions_read` | доступ к REST-endpoint failed transactions |
+| `TNW_Idealdata::config` | access to the configuration section in the admin |
+| `TNW_Idealdata::failed_transactions_read` | access to the failed-transactions REST endpoint |
 
 ---
 
-## 2. Архитектурные особенности
+## 2. Architectural highlights
 
-- **Batch loading везде, где возможно** (stock items, source items, quote items, customers, quotes) — целевой profile: O(1) SQL запросов на N продуктов.
-- **SQL-pagination** в delta-sync плагинах — массивы ID не загружаются в PHP.
-- **Recursion guard (`isInternalCall`)** — внутренний `getList` для дочитки сущностей не триггерит сам плагин.
-- **Property promotion + readonly + strict_types** в новых файлах (PHP 8.1+).
-- **PCI-safe** sanitization gateway-ответов: ключи cc_number/cvv/cvc/pan/card_number/cc_cid/cc_ss_* удаляются перед сериализацией в `gateway_message`.
-- **Defensive try/catch** во всех плагинах с логированием в `LoggerInterface` — ни один из плагинов не должен сломать основной флоу при ошибке обогащения.
-- **Расширения «через прослойку»**: ни одна фича не модифицирует Magento core напрямую — только plugins, observers и extension attributes.
+- **Batch loading wherever possible** (stock items, source items, quote items, customers, quotes) — target profile: O(1) SQL queries for N products.
+- **SQL pagination** in delta-sync plugins — no ID arrays loaded into PHP memory.
+- **Recursion guard (`isInternalCall`)** — internal `getList` calls used to fetch missing entities don't re-trigger the plugin.
+- **Property promotion + readonly + strict_types** in newer files (PHP 8.1+).
+- **PCI-safe** sanitization of gateway responses: the keys cc_number/cvv/cvc/pan/card_number/cc_cid/cc_ss_* are stripped before serialization into `gateway_message`.
+- **Defensive try/catch** in every plugin with logging through `LoggerInterface` — no enrichment failure should ever break the main flow.
+- **Extension via plugins**: no fix touches Magento core directly — only plugins, observers and extension attributes are used.
 
 ---
 
-## 3. Замечания по коду (review)
+## 3. Code review notes
 
-### 3.1. Несоответствие стиля между файлами
+### 3.1. Inconsistent style between files
 
-`Plugin/CustomerRepositoryPlugin.php` и `Model/OrderStatusRepository.php` написаны
-в старом стиле:
-- нет `declare(strict_types=1)`;
-- свойства `protected` вместо `private readonly`;
-- неполный property promotion;
-- использование `ObjectManagerInterface` напрямую (см. ниже).
+`Plugin/CustomerRepositoryPlugin.php` and `Model/OrderStatusRepository.php` use
+the legacy style:
+- no `declare(strict_types=1)`;
+- `protected` properties instead of `private readonly`;
+- incomplete property promotion;
+- direct use of `ObjectManagerInterface` (see below).
 
-Остальные плагины и модели соответствуют единому стилю PHP 8.1+. Стоит привести
-к общему виду.
+The other plugins and models follow the unified PHP 8.1+ style. The legacy
+files should be brought in line.
 
-### 3.2. Anti-pattern: ObjectManager в `CustomerRepositoryPlugin`
+### 3.2. Anti-pattern: ObjectManager in `CustomerRepositoryPlugin`
 
 ```php
 // Plugin/CustomerRepositoryPlugin.php:41
@@ -292,20 +293,21 @@ $companyManagement = $this->objectManager->get(\Magento\Company\Api\CompanyManag
 $address = $this->objectManager->get(AddressRepositoryInterface::class)->getById(...);
 ```
 
-Прямое использование `ObjectManager` — это анти-паттерн в Magento 2. Решение:
-- B2B-ветку вынести в отдельный плагин/класс с conditional-DI через `etc/di.xml`;
-- `AddressRepositoryInterface` инжектить через конструктор.
+Direct use of `ObjectManager` is an anti-pattern in Magento 2. Suggested fix:
+- move the B2B branch into a dedicated plugin/class with conditional DI via `etc/di.xml`;
+- inject `AddressRepositoryInterface` through the constructor.
 
-### 3.3. N+1 в `CustomerRepositoryPlugin`
+### 3.3. N+1 in `CustomerRepositoryPlugin`
 
-Цикл по `$items`:
-- `companyManagement->getByCustomerId($customer->getId())` — потенциально 1 запрос на клиента;
-- `addressRepository->getById($customer->getDefaultBilling())` — ещё 1 запрос на клиента.
+Inside the `$items` loop:
+- `companyManagement->getByCustomerId($customer->getId())` — potentially 1 query per customer;
+- `addressRepository->getById($customer->getDefaultBilling())` — another 1 query per customer.
 
-При `pageSize = 100` это до 200 дополнительных SQL. Нужен batch-механизм
-(одним запросом подтянуть company-mapping и default billing-адреса для всех ID).
+At `pageSize = 100` that adds up to ~200 extra SQL calls. A batch mechanism is
+needed (load company-mapping and default-billing addresses for all IDs in a
+single query).
 
-### 3.4. Race condition в `attempt_number`
+### 3.4. Race condition on `attempt_number`
 
 `Observer/CaptureFailedPaymentObserver::getNextAttemptNumber()`:
 
@@ -314,146 +316,149 @@ $count = (int) $connection->fetchOne("SELECT COUNT(*) FROM ... WHERE quote_id = 
 return $count + 1;
 ```
 
-Между SELECT и INSERT нет атомарности — при параллельных попытках оплаты
-возможны коллизии attempt_number. Решения:
-- использовать `MAX(attempt_number)+1` внутри транзакции с `SELECT ... FOR UPDATE`;
-- либо изначально не хранить attempt_number, а вычислять `ROW_NUMBER()` при выдаче;
-- либо использовать `INSERT ... ON DUPLICATE KEY UPDATE` с уникальным индексом.
+There is no atomicity between SELECT and INSERT — concurrent payment attempts
+can produce duplicate attempt_numbers. Possible fixes:
+- compute `MAX(attempt_number)+1` inside a transaction with `SELECT ... FOR UPDATE`;
+- skip storing attempt_number altogether and compute `ROW_NUMBER()` at read time;
+- use `INSERT ... ON DUPLICATE KEY UPDATE` against a unique index.
 
-### 3.5. Неиспользуемые `Model/PaymentTransaction` и `ResourceModel/PaymentTransaction`
+### 3.5. Unused `Model/PaymentTransaction` and `ResourceModel/PaymentTransaction`
 
-Объявлены ResourceModel + Collection для `tnw_quote_payment_transaction`, но
-ни Observer, ни Repository их не используют — всё пишется/читается raw SQL.
-Либо привести репозиторий к стандартному паттерну Magento (Collection +
-SearchResult), либо удалить неиспользуемые классы.
+A ResourceModel + Collection are declared for `tnw_quote_payment_transaction`,
+but neither the Observer nor the Repository actually use them — everything is
+read/written via raw SQL. Either align the repository with the standard
+Magento pattern (Collection + SearchResult), or delete the unused classes.
 
-### 3.6. `FailedTransactionRepository::getList` отступает от конвенций Magento
+### 3.6. `FailedTransactionRepository::getList` deviates from Magento conventions
 
-Стандартная подпись для repository в Magento — `getList(SearchCriteriaInterface)`.
-Здесь же — кастомная подпись с 7 позиционными параметрами. Это:
-- усложняет swagger/composer-bundle потребителю;
-- лишает клиента возможности задавать произвольные фильтры;
-- не позволяет использовать стандартные `SearchCriteriaBuilder` хелперы.
+The standard repository signature in Magento is `getList(SearchCriteriaInterface)`.
+Here it is a custom signature with 7 positional parameters. Consequences:
+- harder to consume from swagger / composer-bundled clients;
+- the client cannot pass arbitrary filters;
+- standard `SearchCriteriaBuilder` helpers are not usable.
 
-Рекомендуется переделать на `SearchCriteriaInterface` + Collection или хотя бы
-обернуть параметры в DTO/`@api`-интерфейс.
+Recommendation: switch to `SearchCriteriaInterface` + Collection, or at least
+wrap the parameters in a DTO / `@api` interface.
 
-### 3.7. `gateway_message` может содержать чувствительные данные
+### 3.7. `gateway_message` may contain sensitive data
 
-В `sanitizeGatewayMessage` блеклистится только узкий набор ключей. Реальные
-шлюзы (Authorize.Net, Braintree, Stripe) могут возвращать в `additionalInformation`:
-- AVS-данные (адрес, индекс);
-- email клиента;
-- billing/shipping address фрагменты;
-- raw fingerprint карты.
+`sanitizeGatewayMessage` blacklists only a narrow set of keys. Real gateways
+(Authorize.Net, Braintree, Stripe) can return additional fields in
+`additionalInformation`:
+- AVS data (address, ZIP);
+- customer email;
+- billing/shipping address fragments;
+- raw card fingerprint.
 
-Безопаснее реализовать **whitelist** разрешённых ключей вместо blacklist
-запрещённых. Иначе при обновлении шлюза/появлении нового ключа возможна утечка
-PII в сырое поле `gateway_message` БД.
+A safer approach is a **whitelist** of allowed keys instead of a blacklist of
+forbidden ones. Otherwise a gateway upgrade or a new field can leak PII into
+the raw `gateway_message` column.
 
-### 3.8. Недетерминированный `now + 1s` в `RecordSourceCartPlugin`
+### 3.8. Non-deterministic `now + 1s` in `RecordSourceCartPlugin`
 
 ```php
 $now = date('Y-m-d H:i:s', time() + 1);
 ```
 
-Используется для гарантии «updated_at AFTER createOrder write». Это хрупко:
-- зависит от системного времени;
-- при clock skew или быстрых системах через 1 секунду может оказаться, что
-  delta-sync подхватит запись не тот раз;
-- плохо тестируется.
+Used to guarantee that `updated_at` lands AFTER whatever `createOrder()` just
+wrote. This is fragile:
+- depends on system clock;
+- under clock skew or fast hardware the +1s window may not actually be enough,
+  causing delta-sync to miss the row;
+- hard to test.
 
-Альтернатива — оборачивать createOrder в транзакцию и явно вызывать
-`UPDATE ... SET updated_at = NOW(6)` после COMMIT, либо считать lineage без
-зависимости от `updated_at` (использовать отдельный feed).
+Alternative: wrap createOrder in a transaction and explicitly call
+`UPDATE ... SET updated_at = NOW(6)` after COMMIT, or compute lineage without
+relying on `updated_at` (use a dedicated feed).
 
-### 3.9. Эвристика «items_count after < before» в `RecordSourceCartPlugin`
+### 3.9. "items_count after < before" heuristic in `RecordSourceCartPlugin`
 
-Если в момент создания order пользователь параллельно добавил товары в Cart A
-из фронта, items_count может **не уменьшиться** — и фактический split
-квалифицируется как `admin_manual`. Edge-case редкий, но возможен. Стоит
-зафиксировать в комментарии или использовать дополнительный сигнал
-(например, `_moveQuoteItems` flag, если до него можно дотянуться через session).
+If during admin order creation the customer concurrently adds items to Cart A
+from the storefront, items_count may **fail to decrease** — and an actual
+split is then mis-classified as `admin_manual`. Edge case, but possible. Worth
+either documenting it explicitly or using an additional signal (e.g. the
+`_moveQuoteItems` flag if reachable via session).
 
-### 3.10. Состояние плагина между запросами (Address/Stock filters)
+### 3.10. Plugin state across requests (Address/Stock filters)
 
-Плагины `AddressUpdatedAtFilterPlugin` / `StockUpdatedAtFilterPlugin` хранят
-`$updatedAtValue`, `$pageSize`, `$currentPage` как state объекта. Singleton-плагины
-живут per-request, но если в одном запросе делается несколько `getList`,
-возможны:
-- утечка состояния между вызовами (частично решено reset в начале `beforeGetList`);
-- если `before` отработал, а `after` — нет (исключение между ними),
-  state останется заполненным до следующего `before`.
+The plugins `AddressUpdatedAtFilterPlugin` / `StockUpdatedAtFilterPlugin`
+store `$updatedAtValue`, `$pageSize`, `$currentPage` as object state. Plugin
+singletons live per-request, but if multiple `getList` calls happen within
+the same request:
+- state can leak between calls (partly mitigated by reset at the start of `beforeGetList`);
+- if `before` ran but `after` didn't (exception in between), state remains
+  populated until the next `before`.
 
-Лучше передавать state через параметры или wrap-объект, либо явно reset-ить в
-`finally`-блоке `afterGetList`.
+Better to pass state via parameters or a wrapper object, or to reset
+explicitly inside a `finally` block in `afterGetList`.
 
-### 3.11. `setData('items', $items)` как workaround сериализации
+### 3.11. `setData('items', $items)` as a serialization workaround
 
-`AddCartItemAttributesPlugin::ensureItemsLoaded()` делает:
+`AddCartItemAttributesPlugin::ensureItemsLoaded()` does:
 ```php
 $cart->setItems($items);
 $cart->setData('items', $items);
 ```
-Комментарий объясняет причину (REST serializer читает через `getData('items')`).
-Это работает, но:
-- хрупко на апгрейдах;
-- стоит сослаться на конкретный класс/метод сериализатора в комментарии;
-- желательно покрыть API-тестом, чтобы регрессию поймать на CI.
+The comment explains why (the REST serializer reads via `getData('items')`).
+This works, but:
+- it is fragile across Magento upgrades;
+- the comment should reference the specific serializer class/method;
+- ideally an API test would catch any regression on CI.
 
 ### 3.12. Composer constraint `magento/framework: >=103.0.6`
 
-Без верхней границы — потенциальная проблема при major upgrade Magento.
-Рекомендуется зафиксировать как `^103.0.6` или `>=103.0.6 <105.0`.
+No upper bound — a potential problem on any Magento major upgrade.
+Recommended: pin as `^103.0.6` or `>=103.0.6 <105.0`.
 
-### 3.13. ACL ref `Magento_Sales::sales` для `/V1/order/status`
+### 3.13. ACL ref `Magento_Sales::sales` for `/V1/order/status`
 
-Ресурс существует, но обычно для read-only sales-данных используется
-`Magento_Sales::sales_order` или `Magento_Sales::actions_view`. Стоит
-сверить с матрицей прав в реальной интеграции.
+The resource exists, but read-only sales endpoints typically use
+`Magento_Sales::sales_order` or `Magento_Sales::actions_view`. Worth
+double-checking against the integration's permission matrix.
 
-### 3.14. `OrderStatusInterface` без `declare(strict_types=1)`
+### 3.14. `OrderStatusInterface` without `declare(strict_types=1)`
 
-Старый стиль файла — отличается от остальных интерфейсов API. Косметика, но
-непоследовательно.
+Legacy file style — out of line with the rest of the API interfaces. Cosmetic,
+but inconsistent.
 
-### 3.15. Отсутствуют тесты
+### 3.15. No tests
 
-В модуле нет unit/integration-тестов. Учитывая, что критическая часть
-(`RecordSourceCartPlugin`, delta-sync) содержит нетривиальную логику с
-edge-кейсами, тесты крайне желательны. Минимум:
-- unit на категоризацию decline_code;
-- integration на REST endpoint `/V1/tnw/carts/failed-transactions`;
-- integration на корректность `total_count` в delta-sync для пагинации.
+The module ships without unit/integration tests. Given that some critical
+parts (`RecordSourceCartPlugin`, delta-sync) contain non-trivial logic with
+edge cases, tests are highly desirable. Minimum bar:
+- unit test for decline_code categorization;
+- integration test for the `/V1/tnw/carts/failed-transactions` REST endpoint;
+- integration test for `total_count` correctness across delta-sync pagination.
 
-### 3.16. Сериализация snapshot-объектов через `DataObject`
+### 3.16. Snapshot serialization via `DataObject`
 
-`Model/Data/CartSnapshot`, `CartItemSnapshot` и т.д. наследуют `DataObject`,
-но реализуют лишь геттеры. При этом не реализован `set*` по интерфейсу
-(их и нет), но REST-сериализатор Magento может попытаться сериализовать через
-магические методы. Стоит протестировать выдачу — особенно null-поля
-(`getCustomerId(): ?string`), которые могут отдаваться как `""` вместо `null`
-из-за `(string) $this->getData('customer_id')` в `CartItemSnapshot::getProductId()`.
+`Model/Data/CartSnapshot`, `CartItemSnapshot`, etc. extend `DataObject` and
+implement only getters. No `set*` methods declared on the interfaces (none
+required), but Magento's REST serializer may still try to serialize via the
+magic methods. Worth verifying the wire output — specifically nullable fields
+(`getCustomerId(): ?string`) which may be returned as `""` instead of `null`
+because of `(string) $this->getData('product_id')` in `CartItemSnapshot::getProductId()`.
 
-### 3.17. Inline JS в phtml-шаблонах
+### 3.17. Inline JS in phtml templates
 
-`intro.phtml`, `onboarding.phtml`, `support.phtml` содержат inline `<script>`
-с глобальными функциями. По CSP-гайдлайнам Adobe Commerce 2.4+ это нежелательно.
-Рекомендация — вынести в RequireJS-модуль и подключать через `view/adminhtml/web/js`.
+`intro.phtml`, `onboarding.phtml`, `support.phtml` contain inline `<script>`
+blocks with global functions. This is discouraged by Adobe Commerce 2.4+ CSP
+guidelines. Recommendation: extract into a RequireJS module loaded from
+`view/adminhtml/web/js`.
 
 ---
 
-## 4. Резюме
+## 4. Summary
 
-Модуль решает чёткий продуктовый кейс: **отдать наружу всё, что нужно
-IdealData.io для CRM-интеграции, ничего не сломав в Magento**. Архитектура
-в целом грамотная — продуманный delta-sync, batch-загрузка, разумные fallback'и
-и логирование. Главные направления улучшения:
+The module solves a clear product use case: **expose everything IdealData.io
+needs for a CRM integration without breaking anything in Magento**. The
+architecture is generally sound — thoughtful delta-sync, batch loading,
+reasonable fallbacks and logging. Main areas for improvement:
 
-1. **Стандартизировать стиль** старых файлов (CustomerRepositoryPlugin, OrderStatusRepository) под новый.
-2. **Убрать ObjectManager** и устранить N+1 в `CustomerRepositoryPlugin`.
-3. **Перевести `FailedTransactionRepository`** на стандартный `SearchCriteriaInterface` + Collection (которая уже частично готова в `Model/ResourceModel/PaymentTransaction/Collection`).
-4. **Whitelist** для sanitization gateway-ответов вместо blacklist.
-5. **Атомарность** `attempt_number`.
-6. **Тесты** на ключевую бизнес-логику.
-7. **Inline JS → RequireJS** в admin-шаблонах.
+1. **Standardize the style** of the legacy files (`CustomerRepositoryPlugin`, `OrderStatusRepository`) to match the new one.
+2. **Drop ObjectManager** and remove the N+1 in `CustomerRepositoryPlugin`.
+3. **Migrate `FailedTransactionRepository`** to the standard `SearchCriteriaInterface` + Collection (the Collection already partially exists in `Model/ResourceModel/PaymentTransaction/Collection`).
+4. **Whitelist** for gateway-response sanitization instead of blacklist.
+5. **Atomicity** for `attempt_number`.
+6. **Tests** for the core business logic.
+7. **Inline JS → RequireJS** in admin templates.
