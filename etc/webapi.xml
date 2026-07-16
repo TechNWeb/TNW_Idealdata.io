@@ -14,4 +14,13 @@
             <resource ref="TNW_Idealdata::failed_transactions_read"/>
         </resources>
     </route>
+
+    <!-- Storefront pixel config provisioning (pushed by the IdealData app; the
+         merchant enters nothing in Magento by hand). ACL-protected write. -->
+    <route url="/V1/tnw-idealdata/pixel-config" method="PUT">
+        <service class="TNW\Idealdata\Api\PixelConfigManagementInterface" method="save"/>
+        <resources>
+            <resource ref="TNW_Idealdata::pixel_config_write"/>
+        </resources>
+    </route>
 </routes>

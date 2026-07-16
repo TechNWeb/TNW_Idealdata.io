@@ -20,33 +20,67 @@ logged-in-customer presence ("online now") to IdealData. It does two things:
    pages.
 2. **Injects the async pixel loader** on every storefront page (gated by config).
 
-### Enabling from the admin
+### Enabling (app-provisioned — since 1.6)
 
-Configure under **Stores → Configuration → IDEALDATA.IO → Storefront Pixel**:
+**You configure nothing in Magento by hand.** Enable the pixel on the store's
+**Adobe Commerce connection** in the IdealData app; the app then **pushes** the
+token + ingest/loader URLs into this store automatically over an authenticated
+REST call. The admin fields under **Stores → Configuration → IDEALDATA.IO →
+Storefront Pixel** show the delivered values but are **read-only** (managed by the
+IdealData app):
 
-| Field | Value |
-|-------|-------|
-| **Enable Pixel** | `Yes` |
-| **Ingest Base URL** | Full ingest base URL **including** the `/pixel-ingest` prefix (e.g. `https://app.idealdata.io/pixel-ingest`, or an ngrok/localhost URL for local testing). |
-| **Loader URL** | Full URL to the pixel loader script (e.g. `https://app.idealdata.io/pixel/loader.js`). |
-| **Pixel Token** | The `idpx_…` token issued by IdealData for this store's connection (see below). Exposed to storefront JS by design — not a secret. |
+| Field | Managed value |
+|-------|---------------|
+| **Enable Pixel** | Whether the app has enabled the pixel for this store. |
+| **Ingest Base URL** | Public ingest base URL incl. the `/pixel-ingest` prefix. |
+| **Loader URL** | Full URL to the static pixel loader script. |
+| **Pixel Token** | The `idpx_…` token for this store's connection. Exposed to storefront JS by design — not a secret. |
 
 Nothing is injected while **Enable Pixel** is `No`, or while the Token / Loader
 URL are empty. The snippet is self-contained and fails silently: it only sets a
 global and appends an async `<script>` — it can never block or break storefront
 JavaScript.
 
-Get the token by enabling the pixel on the store's **Adobe Commerce connection**
-in the IdealData app (the enable action issues the token and returns its raw
-value once — copy it into the **Pixel Token** field above).
+Rotating the token in the IdealData app re-pushes the new value here; the old
+token keeps working during a short grace window, so storefront presence is never
+interrupted by a re-push.
 
-### Manual install (fallback, when module-owned injection is not used)
+#### Config-provisioning REST endpoint
 
-If you prefer not to let the module inject the loader (or you are on a theme /
-setup where the layout injection is not desired), paste this snippet into the
-storefront `<head>` (e.g. **Content → Design → Configuration → HTML Head →
-Scripts and Style Sheets**, or a "Miscellaneous HTML" block). Substitute your
-own token / ingest base / loader URL:
+The app delivers the config to:
+
+```
+PUT /rest/V1/tnw-idealdata/pixel-config
+{ "enabled": true, "ingestBase": "https://app.idealdata.io/pixel-ingest",
+  "loaderUrl": "https://app.idealdata.io/pixel/loader.js", "token": "idpx_…" }
+```
+
+It writes `tnw_idealdata_pixel/general/{enabled,ingest_base_url,loader_url,token}`
+and flushes the config + full-page caches so the next storefront request reflects
+the change. The endpoint is **ACL-protected** by
+`TNW_Idealdata::pixel_config_write` — the integration/admin token the IdealData
+connector uses must be granted that resource (the same integration that already
+holds the product-write grant). There is no public/self-service provisioning
+path.
+
+### Manual fallback (stores not using app provisioning)
+
+The admin fields are read-only, so a store not using app provisioning can set the
+same config values out-of-band with the Magento CLI:
+
+```bash
+bin/magento config:set tnw_idealdata_pixel/general/enabled 1
+bin/magento config:set tnw_idealdata_pixel/general/ingest_base_url https://app.idealdata.io/pixel-ingest
+bin/magento config:set tnw_idealdata_pixel/general/loader_url https://app.idealdata.io/pixel/loader.js
+bin/magento config:set tnw_idealdata_pixel/general/token idpx_YOUR_TOKEN
+bin/magento cache:flush config full_page
+```
+
+Alternatively, if you prefer not to let the module inject the loader at all (or
+you are on a theme / setup where the layout injection is not desired), paste this
+snippet into the storefront `<head>` (e.g. **Content → Design → Configuration →
+HTML Head → Scripts and Style Sheets**, or a "Miscellaneous HTML" block).
+Substitute your own token / ingest base / loader URL:
 
 ```html
 <script>
