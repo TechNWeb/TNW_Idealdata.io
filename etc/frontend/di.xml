@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+    Registers the IdealData identity customer-data section source against the
+    section name `tnw-idealdata-identity`. The section name is the key both
+    sections.xml (invalidation) and localStorage['mage-cache-storage'] (the
+    persisted client-side cache the pixel SDK reads) use — keep them in sync.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Customer\CustomerData\SectionPool">
+        <arguments>
+            <argument name="sectionSourceMap" xsi:type="array">
+                <item name="tnw-idealdata-identity" xsi:type="string">TNW\Idealdata\CustomerData\Identity</item>
+            </argument>
+        </arguments>
+    </type>
+</config>
