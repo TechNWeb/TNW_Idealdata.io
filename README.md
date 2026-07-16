@@ -57,11 +57,12 @@ PUT /rest/V1/tnw-idealdata/pixel-config
 
 It writes `tnw_idealdata_pixel/general/{enabled,ingest_base_url,loader_url,token}`
 and flushes the config + full-page caches so the next storefront request reflects
-the change. The endpoint is **ACL-protected** by
-`TNW_Idealdata::pixel_config_write` — the integration/admin token the IdealData
-connector uses must be granted that resource (the same integration that already
-holds the product-write grant). There is no public/self-service provisioning
-path.
+the change. The endpoint is **ACL-protected** by the core
+`Magento_Catalog::products` resource — the IdealData integration already holds it
+(product sync + Signal 30 product writes both require it), so provisioning needs
+**no new grant and no integration reauthorization**. There is no
+public/self-service provisioning path. (This mirrors the module's `/V1/order/status`
+route, which likewise reuses a core resource, `Magento_Sales::sales`.)
 
 ### Manual fallback (stores not using app provisioning)
 

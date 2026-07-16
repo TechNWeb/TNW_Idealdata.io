@@ -6,7 +6,6 @@
             <resource id="Magento_Backend::admin">
                 <resource id="TNW_Idealdata::config" title="TNW IdealData Configuration" sortOrder="10"/>
                 <resource id="TNW_Idealdata::failed_transactions_read" title="TNW IdealData: View Failed Transactions" sortOrder="20"/>
-                <resource id="TNW_Idealdata::pixel_config_write" title="TNW IdealData: Provision Storefront Pixel Config" sortOrder="30"/>
             </resource>
         </resources>
     </acl>

@@ -10,10 +10,11 @@ namespace TNW\Idealdata\Api;
  * (`tnw_idealdata_pixel/general/*`), so the merchant never enters the token or
  * ingest/loader URLs in Magento by hand.
  *
- * ACL-protected (`TNW_Idealdata::pixel_config_write`) — reachable only with an
- * integration/admin token that has been granted that resource (the same
- * credential class the IdealData connector already uses for product writes).
- * There is NO public/self-service provisioning path.
+ * ACL-protected (`Magento_Catalog::products`) — reachable only with an
+ * integration/admin token that holds that resource. The IdealData integration
+ * ALREADY holds it (product sync + Signal 30 product writes both require it), so
+ * provisioning needs no new grant and no integration reauthorization. There is
+ * NO public/self-service provisioning path.
  *
  * @api
  */
