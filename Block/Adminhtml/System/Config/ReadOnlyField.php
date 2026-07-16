@@ -20,7 +20,13 @@ class ReadOnlyField extends Field
 {
     protected function _getElementHtml(AbstractElement $element)
     {
+        // `disabled` greys the field and prevents submit; `readonly` is belt-and-
+        // suspenders. Magento's dependence controller (for fields with <depends>)
+        // strips `disabled` client-side when the master condition is met — these
+        // fields therefore carry NO <depends> (see system.xml) so `disabled` sticks;
+        // `readonly` additionally survives any such toggling on text inputs.
         $element->setDisabled('disabled');
+        $element->setReadonly('readonly');
 
         return parent::_getElementHtml($element);
     }
