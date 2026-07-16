@@ -14,4 +14,18 @@
             <resource ref="TNW_Idealdata::failed_transactions_read"/>
         </resources>
     </route>
+
+    <!-- Storefront pixel config provisioning (pushed by the IdealData app; the
+         merchant enters nothing in Magento by hand). ACL-protected write.
+         Guarded by the core Magento_Catalog::products resource — which the
+         IdealData integration ALREADY holds (product sync + Signal 30 product
+         writes both require it) — so provisioning needs no new grant and no
+         integration reauthorization. Mirrors this module's existing
+         /V1/order/status route reusing the core Magento_Sales::sales resource. -->
+    <route url="/V1/tnw-idealdata/pixel-config" method="PUT">
+        <service class="TNW\Idealdata\Api\PixelConfigManagementInterface" method="save"/>
+        <resources>
+            <resource ref="Magento_Catalog::products"/>
+        </resources>
+    </route>
 </routes>
