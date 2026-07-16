@@ -18,5 +18,34 @@
                 <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\Support</frontend_model>
             </group>
         </section>
+        <section id="tnw_idealdata_pixel" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Storefront Pixel</label>
+            <tab>idealdata_tab</tab>
+            <resource>TNW_Idealdata::config</resource>
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Storefront Pixel</label>
+                <comment>Injects the IdealData storefront pixel so logged-in customers report "online now" presence. Values come from your IdealData Adobe Commerce connection settings (Enable Pixel there to issue a token).</comment>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Pixel</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>When enabled, the async pixel loader snippet is injected on every storefront page. Nothing is injected while this is No, or while the Token / Loader URL below are empty.</comment>
+                </field>
+                <field id="ingest_base_url" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Ingest Base URL</label>
+                    <comment>Full ingest base URL INCLUDING the /pixel-ingest path prefix (e.g. https://app.idealdata.io/pixel-ingest, or an ngrok/localhost URL for local testing). The pixel appends /config and /collect.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="loader_url" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Loader URL</label>
+                    <comment>Full URL to the pixel loader script (e.g. https://app.idealdata.io/pixel/loader.js, or a localhost static host for local testing).</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="token" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Pixel Token</label>
+                    <comment>The opaque pixel token issued by IdealData for this store's connection (starts with idpx_). It is exposed to storefront JavaScript by design and is not a secret. Paste the token returned when you enable the pixel in the IdealData app.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+        </section>
     </system>
 </config>
