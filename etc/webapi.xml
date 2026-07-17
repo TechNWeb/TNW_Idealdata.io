@@ -28,4 +28,15 @@
             <resource ref="Magento_Catalog::products"/>
         </resources>
     </route>
+
+    <!-- Read side of the provisioning contract: the IdealData app reads the LIVE
+         config back to reconcile its stored mirror + heal drift. Same ACL as the
+         write (Magento_Catalog::products — already held). The raw token is never
+         returned — only tokenPresent + a SHA-256 fingerprint. -->
+    <route url="/V1/tnw-idealdata/pixel-config" method="GET">
+        <service class="TNW\Idealdata\Api\PixelConfigManagementInterface" method="get"/>
+        <resources>
+            <resource ref="Magento_Catalog::products"/>
+        </resources>
+    </route>
 </routes>

@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace TNW\Idealdata\Model;
 
 use Magento\Framework\App\Cache\TypeListInterface;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\Config\Storage\WriterInterface;
 use Magento\Framework\Exception\InputException;
 use Psr\Log\LoggerInterface;
 use TNW\Idealdata\Api\Data\PixelConfigResultInterface;
 use TNW\Idealdata\Api\Data\PixelConfigResultInterfaceFactory;
+use TNW\Idealdata\Api\Data\PixelConfigStateInterface;
+use TNW\Idealdata\Api\Data\PixelConfigStateInterfaceFactory;
 use TNW\Idealdata\Api\PixelConfigManagementInterface;
 use TNW\Idealdata\Block\Pixel\Loader;
 
@@ -30,6 +33,8 @@ class PixelConfigManagement implements PixelConfigManagementInterface
         private readonly WriterInterface $configWriter,
         private readonly TypeListInterface $cacheTypeList,
         private readonly PixelConfigResultInterfaceFactory $resultFactory,
+        private readonly ScopeConfigInterface $scopeConfig,
+        private readonly PixelConfigStateInterfaceFactory $stateFactory,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -44,12 +49,21 @@ class PixelConfigManagement implements PixelConfigManagementInterface
         $loaderUrl = trim($loaderUrl);
         $token = trim($token);
 
+        // Token-preserve (drift-heal path): enabling with an EMPTY token means
+        // "keep the stored token" — so the IdealData app can re-push corrected
+        // enabled/URLs without minting/handling a raw token (it never stores one).
+        $preserveToken = false;
+        if ($enabled && $token === '') {
+            $storedToken = trim((string) $this->scopeConfig->getValue(Loader::XML_PATH_TOKEN));
+            if ($storedToken === '') {
+                throw new InputException(__('token is required when the pixel is enabled.'));
+            }
+            $preserveToken = true;
+        }
+
         // When enabling, the boot-config the loader needs must be present + valid.
         // When disabling, empty values are allowed (they clear the snippet).
         if ($enabled) {
-            if ($token === '') {
-                throw new InputException(__('token is required when the pixel is enabled.'));
-            }
             if (!$this->isValidUrl($ingestBase)) {
                 throw new InputException(__('ingestBase must be a valid absolute URL.'));
             }
@@ -70,7 +84,9 @@ class PixelConfigManagement implements PixelConfigManagementInterface
         $this->configWriter->save(Loader::XML_PATH_ENABLED, $enabled ? '1' : '0');
         $this->configWriter->save(Loader::XML_PATH_INGEST_BASE_URL, $ingestBase);
         $this->configWriter->save(Loader::XML_PATH_LOADER_URL, $loaderUrl);
-        $this->configWriter->save(Loader::XML_PATH_TOKEN, $token);
+        if (!$preserveToken) {
+            $this->configWriter->save(Loader::XML_PATH_TOKEN, $token);
+        }
 
         // Required: WriterInterface::save does NOT auto-flush; also bust FPC so the
         // change reaches already-cached pages.
@@ -78,7 +94,11 @@ class PixelConfigManagement implements PixelConfigManagementInterface
         $this->cacheTypeList->cleanType('full_page');
 
         $this->logger->info(
-            sprintf('[TNW_Idealdata] pixel config provisioned (enabled=%s)', $enabled ? '1' : '0')
+            sprintf(
+                '[TNW_Idealdata] pixel config provisioned (enabled=%s, tokenPreserved=%s)',
+                $enabled ? '1' : '0',
+                $preserveToken ? '1' : '0'
+            )
         );
 
         /** @var PixelConfigResultInterface $result */
@@ -87,6 +107,29 @@ class PixelConfigManagement implements PixelConfigManagementInterface
         $result->setMessage($enabled ? 'Pixel config saved and enabled.' : 'Pixel config saved and disabled.');
 
         return $result;
+    }
+
+    public function get(): PixelConfigStateInterface
+    {
+        // Read at the default scope — mirrors where save() writes (scopeId 0), so
+        // the read-back reflects exactly what the app provisioned.
+        $enabled = $this->scopeConfig->isSetFlag(Loader::XML_PATH_ENABLED);
+        $ingestBase = trim((string) $this->scopeConfig->getValue(Loader::XML_PATH_INGEST_BASE_URL));
+        $loaderUrl = trim((string) $this->scopeConfig->getValue(Loader::XML_PATH_LOADER_URL));
+        $token = trim((string) $this->scopeConfig->getValue(Loader::XML_PATH_TOKEN));
+
+        $tokenPresent = $token !== '';
+
+        /** @var PixelConfigStateInterface $state */
+        $state = $this->stateFactory->create();
+        $state->setEnabled($enabled);
+        $state->setIngestBase($ingestBase);
+        $state->setLoaderUrl($loaderUrl);
+        $state->setTokenPresent($tokenPresent);
+        // Never return the raw token — only a SHA-256 fingerprint for drift compare.
+        $state->setTokenSha256($tokenPresent ? hash('sha256', $token) : null);
+
+        return $state;
     }
 
     private function isValidUrl(string $url): bool

@@ -23,7 +23,7 @@ connector: it exposes authenticated REST endpoints the connector calls, and host
   `getMockBuilder(...)->disableOriginalConstructor()`. No module-local `phpunit.xml`
   (relies on the host Magento's config).
 - **Versioning:** bump BOTH `etc/module.xml` `setup_version` and `composer.json`
-  `version` together on a shippable change. Current: **1.6**.
+  `version` together on a shippable change (and the README install line). Current: **1.7**.
 - Validate edits locally with `php -l` (all PHP) + a `DOMDocument` load per XML file.
 
 ## Storefront pixel
@@ -48,6 +48,16 @@ via `WriterInterface` + flushes config + full_page caches). The `system.xml` fie
 **read-only / IdealData-managed** (`Block\Adminhtml\System\Config\ReadOnlyField`);
 `bin/magento config:set` is the fallback for stores not using app provisioning. Full
 cross-repo contract: `../idealdata3-docs/_docs/pixel/adobe-commerce-config-provisioning.md`.
+
+**Read-back + heal (since 1.7).** `GET /rest/V1/tnw-idealdata/pixel-config`
+(`PixelConfigManagementInterface::get` → `PixelConfigStateInterface`) returns the
+LIVE config so the app reconciles its stored mirror + heals drift — AC is the
+source of truth for what's actually running. The **raw token is never returned**:
+only `token_present` + a `token_sha256` fingerprint (hash-compared against the
+app's stored active-token SHA-256). Same ACL as the write. `save` also gained a
+**token-preserve** path: `enabled:true` + an EMPTY `token` keeps the stored token
+(so the app can re-push corrected enabled/URLs to heal drift WITHOUT minting a
+raw token — it stores only a hash).
 
 > **⚠️ Pixel-config endpoint ACL — intentional shortcut + follow-up TODO.**
 > `PUT /rest/V1/tnw-idealdata/pixel-config` is guarded by the core

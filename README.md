@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.5 --no-update
+composer require tnw/module-idealdata=1.7 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -63,6 +63,35 @@ the change. The endpoint is **ACL-protected** by the core
 **no new grant and no integration reauthorization**. There is no
 public/self-service provisioning path. (This mirrors the module's `/V1/order/status`
 route, which likewise reuses a core resource, `Magento_Sales::sales`.)
+
+**Token preserve (drift-heal path, since 1.7).** Calling `save` with `enabled:true`
+and an **empty** `token` PRESERVES the currently-stored token (it is not
+overwritten) — only `enabled` + the URLs are re-written. This lets the app re-push
+corrected config to heal drift **without minting or handling a raw token** (the app
+stores only a SHA-256 of it). Enabling with an empty token when none is stored yet
+is still rejected.
+
+#### Config read-back REST endpoint (since 1.7)
+
+Adobe Commerce — not IdealData — is the source of truth for what is actually
+running on the storefront. The app reads the live config back to reconcile its
+stored mirror and heal drift:
+
+```
+GET /rest/V1/tnw-idealdata/pixel-config
+→ { "enabled": true,
+    "ingest_base": "https://app.idealdata.io/pixel-ingest",
+    "loader_url": "https://app.idealdata.io/pixel/loader.js",
+    "token_present": true,
+    "token_sha256": "<sha-256 hex of the stored token>" }
+```
+
+It reads the same `tnw_idealdata_pixel/general/*` config paths at the default
+scope. **The raw token is never returned** — only whether one is stored
+(`token_present`) and its SHA-256 fingerprint (`token_sha256`), so the app can
+hash-compare against the SHA-256 it holds for the connection's active token (the
+only way to detect token drift without exposing the raw value). Same ACL as the
+write (`Magento_Catalog::products` — already held, so no new grant / no reauth).
 
 ### Manual fallback (stores not using app provisioning)
 
