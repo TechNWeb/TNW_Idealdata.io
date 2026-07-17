@@ -31,4 +31,5 @@
 
     <preference for="TNW\Idealdata\Api\PixelConfigManagementInterface" type="TNW\Idealdata\Model\PixelConfigManagement"/>
     <preference for="TNW\Idealdata\Api\Data\PixelConfigResultInterface" type="TNW\Idealdata\Model\Data\PixelConfigResult"/>
+    <preference for="TNW\Idealdata\Api\Data\PixelConfigStateInterface" type="TNW\Idealdata\Model\Data\PixelConfigState"/>
 </config>
