@@ -23,7 +23,7 @@ connector: it exposes authenticated REST endpoints the connector calls, and host
   `getMockBuilder(...)->disableOriginalConstructor()`. No module-local `phpunit.xml`
   (relies on the host Magento's config).
 - **Versioning:** bump BOTH `etc/module.xml` `setup_version` and `composer.json`
-  `version` together on a shippable change (and the README install line). Current: **1.7**.
+  `version` together on a shippable change (and the README install line). Current: **1.8**.
 - Validate edits locally with `php -l` (all PHP) + a `DOMDocument` load per XML file.
 
 ## Storefront pixel

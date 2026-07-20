@@ -21,6 +21,7 @@ class Loader extends Template
     const XML_PATH_INGEST_BASE_URL = 'tnw_idealdata_pixel/general/ingest_base_url';
     const XML_PATH_LOADER_URL = 'tnw_idealdata_pixel/general/loader_url';
     const XML_PATH_TOKEN = 'tnw_idealdata_pixel/general/token';
+    const XML_PATH_DEBUG = 'tnw_idealdata_pixel/general/debug';
 
     /** Canonical platform code (systems.code) the pixel loader boots with. */
     const PLATFORM = 'adobecommerce';
@@ -80,5 +81,18 @@ class Loader extends Template
     public function getPlatform()
     {
         return self::PLATFORM;
+    }
+
+    /**
+     * Whether SDK-wide debug logging is enabled. A LOCAL, operator-editable
+     * switch (NOT app-managed/provisioned): when on, the loader emits
+     * window.idealdataSettings.debug=true and the pixel logs verbosely to the
+     * browser console. Off by default. Independent of isPixelEnabled().
+     *
+     * @return bool
+     */
+    public function isDebugEnabled()
+    {
+        return $this->_scopeConfig->isSetFlag(self::XML_PATH_DEBUG, ScopeInterface::SCOPE_STORE);
     }
 }

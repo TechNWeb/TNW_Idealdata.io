@@ -8,6 +8,8 @@
         <tnw_idealdata_pixel>
             <general>
                 <enabled>0</enabled>
+                <!-- Local debug logging switch; off by default (see system.xml). -->
+                <debug>0</debug>
             </general>
         </tnw_idealdata_pixel>
     </default>
