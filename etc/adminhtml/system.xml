@@ -63,6 +63,9 @@
                     <comment>Local troubleshooting switch (not managed by the IdealData app). When Yes, the storefront pixel logs verbose diagnostics to the browser console — including which cart capture layer (native Magento event / section-diff / public API) produced each cart event. Local console only; nothing is sent anywhere. Leave No in production.</comment>
                 </field>
             </group>
+            <group id="developer_snippets" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\DeveloperSnippets</frontend_model>
+            </group>
         </section>
     </system>
 </config>

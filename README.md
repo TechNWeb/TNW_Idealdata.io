@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.8 --no-update
+composer require tnw/module-idealdata=1.9 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -153,6 +153,24 @@ production. Manual fallback (stores not using the admin toggle):
 bin/magento config:set tnw_idealdata_pixel/general/debug 1
 bin/magento cache:flush config full_page
 ```
+
+### Developer: manual cart-event binding (informational — since 1.9)
+
+**Stores &rarr; Configuration &rarr; IDEALDATA.IO &rarr; Storefront Pixel** has a
+collapsible **"Developer: manual cart-event binding (optional)"** panel with
+copy-paste JavaScript snippets for a merchant's developer who wants to bind cart
+events to the pixel explicitly. It is **purely informational** — it displays code
+to copy and runs nothing; it is always visible in the pixel config area and gated
+behind nothing.
+
+Cart events are captured **automatically** on Adobe Commerce (native Magento
+events + a customer-data section diff), so no code is required for the common case.
+Manual binding via the public `idealdataPixel('track', 'cart.add' | 'cart.remove',
+{...})` API is for precise, theme-known context or coverage the auto-capture does
+not reach; explicit calls de-dupe against auto-capture (explicit wins). The panel
+also shows the manual-identity snippet
+(`idealdataPixel('setCustomerId', '<numericId>')`) for custom themes. Full API
+reference: the `idealdata3-pixel` repo README ("Public API").
 
 ### Identity — storage key (for pixel SDK maintainers)
 
