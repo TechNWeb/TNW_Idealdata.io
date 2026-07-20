@@ -1,0 +1,116 @@
+<?php
+/**
+ * Informational admin block — developer reference for binding storefront cart
+ * events to the pixel's public API. STATIC content only: it displays copyable
+ * code and guidance, and executes nothing. See DeveloperSnippets.php.
+ *
+ * @var \TNW\Idealdata\Block\Adminhtml\System\Config\DeveloperSnippets $block
+ */
+?>
+<div class="idealdata-config-fieldset idealdata-collapsed" id="idealdata-developer-snippets-block">
+    <div class="idealdata-config-title" onclick="toggleIdealdataDeveloperSnippets()">Developer: manual cart-event binding (optional)</div>
+    <div class="idealdata-config-content">
+        <div class="idealdata-developer-snippets">
+            <p>
+                The pixel already captures cart activity <strong>automatically</strong> on
+                Adobe Commerce (native Magento events plus a customer-data section diff) —
+                you do not need to write any code to get <code>cart.add</code> /
+                <code>cart.remove</code> events. This section is for developers who want
+                <strong>precise, explicit</strong> instrumentation: e.g. sending the exact
+                <code>productId</code>, variant or quantity your theme knows but the cart
+                section may not expose, or covering a custom theme / checkout that the
+                automatic capture does not reach.
+            </p>
+            <p>
+                Explicit calls and automatic capture <strong>de-duplicate against each
+                other</strong> (same action + product within a short window), and the
+                explicit call wins — so adding these snippets will not double-count. If you
+                want to rely <em>only</em> on explicit calls, ask IdealData to set
+                <code>cartAutoCapture: false</code> for this store to turn the automatic
+                capture off.
+            </p>
+            <p>
+                All snippets use the global <code>idealdataPixel(...)</code> function. It is
+                safe to call even <strong>before</strong> the pixel finishes loading — early
+                calls are queued and replayed automatically — so you can place these
+                wherever your theme fires the relevant event.
+            </p>
+
+            <h4>Add to cart</h4>
+            <p>Call this from your theme's add-to-cart success handler. Every field is optional — send what you have.</p>
+            <div class="idealdata-snippet">
+                <button type="button" class="action-default scalable idealdata-copy-btn">Copy</button>
+                <pre><code>idealdataPixel('track', 'cart.add', {
+  productId: '789',           // the numeric product id (as a string)
+  variantId: '789-BLUE-L',    // optional: the specific variant/child sku
+  title: 'Blue T-Shirt',      // optional: product name
+  quantity: 1,                // optional: units added in this action
+  cartTotalQuantity: 5        // optional: total items in the cart afterwards
+});</code></pre>
+            </div>
+
+            <h4>Remove from cart</h4>
+            <p>Call this from your theme's remove / decrement handler.</p>
+            <div class="idealdata-snippet">
+                <button type="button" class="action-default scalable idealdata-copy-btn">Copy</button>
+                <pre><code>idealdataPixel('track', 'cart.remove', {
+  productId: '789',           // the numeric product id (as a string)
+  quantity: 1,                // optional: units removed in this action
+  cartTotalQuantity: 3        // optional: total items in the cart afterwards
+});</code></pre>
+            </div>
+
+            <h4>Manual customer identity (custom themes)</h4>
+            <p>
+                The pixel detects the logged-in customer automatically on standard themes.
+                On a heavily customised theme where that detection is unavailable, set the
+                numeric customer id yourself. A manual id always takes precedence over
+                automatic detection.
+            </p>
+            <div class="idealdata-snippet">
+                <button type="button" class="action-default scalable idealdata-copy-btn">Copy</button>
+                <pre><code>idealdataPixel('setCustomerId', '12345'); // the numeric customer id, as a string</code></pre>
+            </div>
+
+            <p class="idealdata-snippet-note">
+                These are illustrative examples — replace the placeholder values with the
+                real data your theme provides. This panel only displays code for you to
+                copy; nothing here runs on your store.
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleIdealdataDeveloperSnippets() {
+        var el = document.getElementById('idealdata-developer-snippets-block');
+        el.classList.toggle('idealdata-collapsed');
+    }
+    (function () {
+        var block = document.getElementById('idealdata-developer-snippets-block');
+        if (!block) {
+            return;
+        }
+        block.addEventListener('click', function (event) {
+            var btn = event.target;
+            if (!btn || !btn.classList || !btn.classList.contains('idealdata-copy-btn')) {
+                return;
+            }
+            event.stopPropagation();
+            var wrapper = btn.closest('.idealdata-snippet');
+            var code = wrapper ? wrapper.querySelector('pre') : null;
+            if (!code) {
+                return;
+            }
+            var text = code.textContent;
+            var done = function () {
+                var original = btn.textContent;
+                btn.textContent = 'Copied';
+                setTimeout(function () { btn.textContent = original; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done, function () {});
+            }
+        });
+    })();
+</script>
