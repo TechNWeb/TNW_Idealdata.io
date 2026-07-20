@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.7 --no-update
+composer require tnw/module-idealdata=1.8 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -127,6 +127,32 @@ Substitute your own token / ingest base / loader URL:
 > Page Cache disabled. The pixel reads the customer id client-side from the
 > `tnw-idealdata-identity` customer-data section instead (installed by this
 > module).
+
+### Debug logging (local troubleshooting — since 1.8)
+
+**Stores &rarr; Configuration &rarr; IDEALDATA.IO &rarr; Storefront Pixel** has a
+**Debug Logging** field (Yes/No, default **No**). Unlike the token / URL fields,
+it is **local and operator-editable** — it is **not** managed or pushed by the
+IdealData app. When set to **Yes**, the loader emits
+`window.idealdataSettings.debug = true` and the pixel SDK logs verbose diagnostics
+to the **browser console** (prefixed `[idealdata-pixel]`):
+
+- which cart capture layer produced each `cart.add` / `cart.remove` —
+  `native-event` (with the raw Magento event, e.g. `ajax:addToCart`),
+  `section-diff` (with the `summary_count` before&rarr;after), or `public-api`;
+- every de-dup suppression (which key collapsed against which prior layer);
+- page-view and presence transitions, and a per-event send/drop gate trace.
+
+Use it to confirm, on a live theme, **which trigger actually fires** (e.g.
+whether native Magento events fire on Luma, or the section-diff safety net carries
+removes/qty-changes; on Hyvä, that `private-content-loaded` drives it). The logs
+are **local console only — nothing leaves the browser**. Leave it **No** in
+production. Manual fallback (stores not using the admin toggle):
+
+```bash
+bin/magento config:set tnw_idealdata_pixel/general/debug 1
+bin/magento cache:flush config full_page
+```
 
 ### Identity — storage key (for pixel SDK maintainers)
 

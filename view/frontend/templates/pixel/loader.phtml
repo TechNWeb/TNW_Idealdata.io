@@ -20,7 +20,8 @@ if (!$block->isPixelEnabled()) {
     window.idealdataSettings = {
         token: '<?= $escaper->escapeJs($block->getToken()) ?>',
         platform: '<?= $escaper->escapeJs($block->getPlatform()) ?>',
-        ingestBase: '<?= $escaper->escapeJs($block->getIngestBaseUrl()) ?>'
+        ingestBase: '<?= $escaper->escapeJs($block->getIngestBaseUrl()) ?>',
+        debug: <?= $block->isDebugEnabled() ? 'true' : 'false' ?>
     };
 </script>
 <script async src="<?= $escaper->escapeUrl($block->getLoaderUrl()) ?>"></script>
