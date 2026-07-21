@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+    Injects the IdealData storefront-pixel loader snippet at the end of the body
+    on every storefront page. The block renders nothing unless the pixel is
+    enabled in admin config (see Block\Pixel\Loader::isPixelEnabled()).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="before.body.end">
+            <block class="TNW\Idealdata\Block\Pixel\Loader"
+                   name="tnw_idealdata.pixel.loader"
+                   template="TNW_Idealdata::pixel/loader.phtml"/>
+        </referenceContainer>
+    </body>
+</page>

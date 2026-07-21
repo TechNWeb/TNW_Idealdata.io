@@ -18,5 +18,54 @@
                 <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\Support</frontend_model>
             </group>
         </section>
+        <section id="tnw_idealdata_pixel" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Storefront Pixel</label>
+            <tab>idealdata_tab</tab>
+            <resource>TNW_Idealdata::config</resource>
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Storefront Pixel</label>
+                <comment><![CDATA[Injects the IdealData storefront pixel so logged-in customers report "online now" presence. <strong>These values are managed automatically by the IdealData app</strong> — enable the pixel on your Adobe Commerce connection there and the token + URLs below are delivered to this store for you. The fields are read-only; you do not need to edit them.]]></comment>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Pixel</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\ReadOnlyField</frontend_model>
+                    <comment>Managed automatically by the IdealData app; do not edit. Reflects whether the app has enabled the pixel for this store.</comment>
+                </field>
+                <!-- NOTE: no <depends> on these three fields. Magento's dependence
+                     controller (FormElementDependenceController) strips the `disabled`
+                     attribute off dependent fields when the master condition is met,
+                     which would re-enable our read-only inputs. They are always shown,
+                     always read-only (managed by the IdealData app). -->
+                <field id="ingest_base_url" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Ingest Base URL</label>
+                    <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\ReadOnlyField</frontend_model>
+                    <comment>Managed automatically by the IdealData app; do not edit. Full ingest base URL including the /pixel-ingest prefix.</comment>
+                </field>
+                <field id="loader_url" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Loader URL</label>
+                    <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\ReadOnlyField</frontend_model>
+                    <comment>Managed automatically by the IdealData app; do not edit. Full URL to the pixel loader script.</comment>
+                </field>
+                <field id="token" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Pixel Token</label>
+                    <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\ReadOnlyField</frontend_model>
+                    <comment>Managed automatically by the IdealData app; do not edit. The opaque pixel token (starts with idpx_) delivered for this store's connection. Exposed to storefront JavaScript by design; not a secret.</comment>
+                </field>
+                <!-- Debug is a LOCAL, operator-editable switch — NOT managed/pushed by the
+                     IdealData app. It intentionally has NO ReadOnlyField frontend_model so
+                     an operator can flip it. When on, the loader emits
+                     window.idealdataSettings.debug=true and the pixel SDK logs verbosely to
+                     the browser console (which cart capture layer fired, event tracing).
+                     Local console only — nothing leaves the browser. Leave OFF in production. -->
+                <field id="debug" translate="label comment" type="select" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Debug Logging</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Local troubleshooting switch (not managed by the IdealData app). When Yes, the storefront pixel logs verbose diagnostics to the browser console — including which cart capture layer (native Magento event / section-diff / public API) produced each cart event. Local console only; nothing is sent anywhere. Leave No in production.</comment>
+                </field>
+            </group>
+            <group id="developer_snippets" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                <frontend_model>TNW\Idealdata\Block\Adminhtml\System\Config\DeveloperSnippets</frontend_model>
+            </group>
+        </section>
     </system>
 </config>

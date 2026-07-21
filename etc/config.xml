@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <!-- Storefront pixel: disabled by default. Nothing is injected onto the
+             storefront until an admin enables it AND provides a token + loader
+             URL. See Block\Pixel\Loader::isPixelEnabled(). -->
+        <tnw_idealdata_pixel>
+            <general>
+                <enabled>0</enabled>
+                <!-- Local debug logging switch; off by default (see system.xml). -->
+                <debug>0</debug>
+            </general>
+        </tnw_idealdata_pixel>
+    </default>
+</config>

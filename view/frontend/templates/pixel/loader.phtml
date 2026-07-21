@@ -1,0 +1,27 @@
+<?php
+/**
+ * IdealData storefront-pixel loader snippet.
+ *
+ * Sets the canonical boot-config object `window.idealdataSettings`
+ * ({ token, platform, ingestBase }) then loads the pixel loader async. The
+ * loader reads the numeric customer id client-side from the
+ * `tnw-idealdata-identity` customer-data section (see CustomerData\Identity),
+ * so NO inline-PHP customer id is emitted here — that path is broken under Full
+ * Page Cache. Renders nothing unless the pixel is enabled + fully configured.
+ *
+ * @var \TNW\Idealdata\Block\Pixel\Loader $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->isPixelEnabled()) {
+    return;
+}
+?>
+<script type="text/javascript">
+    window.idealdataSettings = {
+        token: '<?= $escaper->escapeJs($block->getToken()) ?>',
+        platform: '<?= $escaper->escapeJs($block->getPlatform()) ?>',
+        ingestBase: '<?= $escaper->escapeJs($block->getIngestBaseUrl()) ?>',
+        debug: <?= $block->isDebugEnabled() ? 'true' : 'false' ?>
+    };
+</script>
+<script async src="<?= $escaper->escapeUrl($block->getLoaderUrl()) ?>"></script>
