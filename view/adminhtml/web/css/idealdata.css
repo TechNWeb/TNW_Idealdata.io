@@ -91,6 +91,24 @@
     padding: .1rem .4rem;
     border-radius: 3px;
 }
+.idealdata-verify-steps {
+    list-style: decimal outside;
+    padding-left: 2rem;
+    margin: .6rem 0 1.2rem;
+}
+.idealdata-verify-steps > li {
+    line-height: 1.6;
+    margin-bottom: .6rem;
+}
+.idealdata-verify-steps ul {
+    list-style: disc outside;
+    padding-left: 2rem;
+    margin: .4rem 0;
+}
+.idealdata-verify-steps ul li {
+    line-height: 1.6;
+    margin-bottom: .2rem;
+}
 .idealdata-snippet {
     position: relative;
     margin: .6rem 0 1.2rem;

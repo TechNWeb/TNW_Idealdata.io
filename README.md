@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.9 --no-update
+composer require tnw/module-idealdata=1.10 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -154,10 +154,57 @@ bin/magento config:set tnw_idealdata_pixel/general/debug 1
 bin/magento cache:flush config full_page
 ```
 
+### Verify cart tracking on your theme (since 1.10)
+
+Cart capture works automatically for standard flows, but **which** controls fire
+depends on your theme's runtime behaviour — something that **can only be verified
+empirically**, on a live page in the browser, so there is deliberately no "coverage
+OK" indicator. Verify coverage with **Debug Logging** (above). The same procedure is
+shown in the admin panel below:
+
+**Prerequisite:** the pixel must be enabled first — **Enable Pixel** must be **Yes**
+(turned on for you from the IdealData app when you enable the pixel on your Adobe
+Commerce connection). While it is off, no pixel code is injected on your storefront
+pages at all, so there is nothing to verify and the console stays silent.
+
+1. Set **Debug Logging = Yes** and save.
+2. Open the storefront with the browser **console open**. Debug Logging only **adds
+   verbose lines to the browser console** — those log lines stay in the browser; it
+   does not change what the pixel sends. Turn Debug back to **No** in production to
+   keep the console clean.
+3. **Exercise EVERY place a shopper can add to or change the cart — not just the
+   product page.** Different surfaces route through different capture layers, so a
+   control tracked on one page may be untracked on another. Walk through all that
+   your store has:
+   - product detail page **"Add to Cart"**;
+   - category / listing **"Add to Cart"** (where present);
+   - **mini-cart / cart drawer** — qty change, remove;
+   - **cart page** (`/checkout/cart`) — qty update, remove;
+   - **widgets / blocks**: related products, up-sells, cross-sells, "you may also
+     like", promo blocks on the homepage or CMS pages, quick-view / quick-buy modals;
+   - any **theme-specific or third-party add-to-cart**: bundles, configurable
+     quick-add, one-click buy.
+4. For each action, watch the console: a line showing `cart.add` / `cart.remove`
+   captured via `native-event` or `section-diff` means auto-capture works there.
+   **No line for an action means that surface is NOT auto-tracked** and needs a
+   manual binding.
+5. For any surface that didn't fire, add the matching snippet (below) to that theme
+   control's handler, and re-test with debug on until every cart surface logs an event.
+
+Auto-capture covers most standard flows out of the box; manual binding is only for
+the gaps this procedure surfaces (custom themes, custom widgets, non-standard
+add-to-cart). Adding a binding defensively where auto-capture already works is safe —
+explicit calls and auto-capture **de-dupe against each other** within a short window
+(explicit wins), so you won't double-count. (Concretely: a PDP/listing add usually
+fires the native Magento event, a mini-cart qty change is often caught only by the
+section-diff safety net, and a custom widget might fire neither — hence exercising
+**all** surfaces, not just the catalog.)
+
 ### Developer: manual cart-event binding (informational — since 1.9)
 
 **Stores &rarr; Configuration &rarr; IDEALDATA.IO &rarr; Storefront Pixel** has a
-collapsible **"Developer: manual cart-event binding (optional)"** panel with
+collapsible **"Developer: verify cart tracking &amp; manual binding (optional)"** panel
+(which leads with the verification procedure above) with
 copy-paste JavaScript snippets for a merchant's developer who wants to bind cart
 events to the pixel explicitly. It is **purely informational** — it displays code
 to copy and runs nothing; it is always visible in the pixel config area and gated
