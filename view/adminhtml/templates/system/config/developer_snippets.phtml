@@ -8,9 +8,63 @@
  */
 ?>
 <div class="idealdata-config-fieldset idealdata-collapsed" id="idealdata-developer-snippets-block">
-    <div class="idealdata-config-title" onclick="toggleIdealdataDeveloperSnippets()">Developer: manual cart-event binding (optional)</div>
+    <div class="idealdata-config-title" onclick="toggleIdealdataDeveloperSnippets()">Developer: verify cart tracking &amp; manual binding (optional)</div>
     <div class="idealdata-config-content">
         <div class="idealdata-developer-snippets">
+            <h4>How to verify cart tracking on your theme</h4>
+            <p>
+                Cart capture works automatically for standard flows, but which controls
+                actually fire depends on your theme's runtime behaviour — something that
+                <strong>cannot be seen from the admin</strong>, only in the browser. Before
+                writing any manual binding, verify coverage on a live page using the
+                <strong>Debug Logging</strong> field above:
+            </p>
+            <ol class="idealdata-verify-steps">
+                <li>Set <strong>Debug Logging = Yes</strong> (the field above) and click <strong>Save Config</strong>.</li>
+                <li>
+                    Open the storefront in a browser with the developer <strong>console open</strong>.
+                    Debug output is logged <strong>locally to the console only — nothing is sent anywhere</strong>.
+                    Remember to turn Debug Logging back to <strong>No</strong> in production when you are done.
+                </li>
+                <li>
+                    <strong>Exercise EVERY place a shopper can add to or change the cart — not just the
+                    obvious product page.</strong> Different surfaces route through different capture
+                    layers, so a control that works on one page may not be tracked on another. Walk
+                    through all of these that your store has:
+                    <ul>
+                        <li>product detail page <strong>&ldquo;Add to Cart&rdquo;</strong>;</li>
+                        <li>category / listing <strong>&ldquo;Add to Cart&rdquo;</strong> (where present);</li>
+                        <li>the <strong>mini-cart / cart drawer</strong> — quantity change and remove;</li>
+                        <li>the <strong>cart page</strong> (<code>/checkout/cart</code>) — quantity update and remove;</li>
+                        <li><strong>widgets / blocks</strong>: related products, up-sells, cross-sells,
+                            &ldquo;you may also like&rdquo;, promo blocks on the homepage or CMS pages,
+                            quick-view / quick-buy modals;</li>
+                        <li>any <strong>theme-specific or third-party add-to-cart</strong>: bundles,
+                            configurable quick-add, one-click / one-page buy.</li>
+                    </ul>
+                </li>
+                <li>
+                    For each action, watch the console. A line showing <code>cart.add</code> /
+                    <code>cart.remove</code> captured via <code>native-event</code> or
+                    <code>section-diff</code> means auto-capture works on that surface.
+                    <strong>No line for an action means that surface is NOT auto-tracked</strong> and
+                    needs a manual binding.
+                </li>
+                <li>
+                    For any surface that did not fire, add the matching snippet (below) to that
+                    theme control's handler. Re-test with Debug Logging on until every cart surface
+                    logs an event.
+                </li>
+            </ol>
+            <p class="idealdata-snippet-note">
+                Auto-capture covers most standard flows out of the box — manual binding is only for the
+                gaps this procedure surfaces (custom themes, custom widgets, non-standard add-to-cart).
+                It is safe to add a binding defensively even where auto-capture already works: explicit
+                calls and automatic capture <strong>de-duplicate against each other</strong> within a
+                short window (explicit wins), so you will not double-count.
+            </p>
+
+            <h4>Manual cart-event binding</h4>
             <p>
                 The pixel already captures cart activity <strong>automatically</strong> on
                 Adobe Commerce (native Magento events plus a customer-data section diff) —
