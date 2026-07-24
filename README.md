@@ -157,15 +157,16 @@ bin/magento cache:flush config full_page
 ### Verify cart tracking on your theme (since 1.10)
 
 Cart capture works automatically for standard flows, but **which** controls fire
-depends on your theme's runtime behaviour — something that **cannot be determined
-from the admin** (it's browser-side), so there is deliberately no "coverage OK"
-indicator. Instead, verify coverage on a live page with **Debug Logging** (above).
-The same procedure is shown in the admin panel below:
+depends on your theme's runtime behaviour — something that **can only be verified
+empirically**, on a live page in the browser, so there is deliberately no "coverage
+OK" indicator. Verify coverage with **Debug Logging** (above). The same procedure is
+shown in the admin panel below:
 
 1. Set **Debug Logging = Yes** and save.
-2. Open the storefront with the browser **console open**. Debug output is
-   **local to the console only — nothing is sent**; turn Debug back to **No** in
-   production when done.
+2. Open the storefront with the browser **console open**. Debug Logging only **adds
+   verbose lines to the browser console** — those log lines stay in the browser; it
+   does not change what the pixel sends. Turn Debug back to **No** in production to
+   keep the console clean.
 3. **Exercise EVERY place a shopper can add to or change the cart — not just the
    product page.** Different surfaces route through different capture layers, so a
    control tracked on one page may be untracked on another. Walk through all that

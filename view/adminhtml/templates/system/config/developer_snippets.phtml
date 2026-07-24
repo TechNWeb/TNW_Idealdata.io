@@ -15,16 +15,17 @@
             <p>
                 Cart capture works automatically for standard flows, but which controls
                 actually fire depends on your theme's runtime behaviour — something that
-                <strong>cannot be seen from the admin</strong>, only in the browser. Before
-                writing any manual binding, verify coverage on a live page using the
+                <strong>can only be verified empirically</strong>, on a live page in the
+                browser. Before writing any manual binding, verify coverage using the
                 <strong>Debug Logging</strong> field above:
             </p>
             <ol class="idealdata-verify-steps">
                 <li>Set <strong>Debug Logging = Yes</strong> (the field above) and click <strong>Save Config</strong>.</li>
                 <li>
                     Open the storefront in a browser with the developer <strong>console open</strong>.
-                    Debug output is logged <strong>locally to the console only — nothing is sent anywhere</strong>.
-                    Remember to turn Debug Logging back to <strong>No</strong> in production when you are done.
+                    Debug Logging only <strong>adds verbose lines to the browser console</strong> —
+                    those log lines stay in the browser; it does not change what the pixel sends.
+                    Turn Debug Logging back to <strong>No</strong> in production to keep the console clean.
                 </li>
                 <li>
                     <strong>Exercise EVERY place a shopper can add to or change the cart — not just the
