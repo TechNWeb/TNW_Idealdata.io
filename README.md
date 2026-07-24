@@ -162,6 +162,11 @@ empirically**, on a live page in the browser, so there is deliberately no "cover
 OK" indicator. Verify coverage with **Debug Logging** (above). The same procedure is
 shown in the admin panel below:
 
+**Prerequisite:** the pixel must be enabled first — **Enable Pixel** must be **Yes**
+(turned on for you from the IdealData app when you enable the pixel on your Adobe
+Commerce connection). While it is off, no pixel code is injected on your storefront
+pages at all, so there is nothing to verify and the console stays silent.
+
 1. Set **Debug Logging = Yes** and save.
 2. Open the storefront with the browser **console open**. Debug Logging only **adds
    verbose lines to the browser console** — those log lines stay in the browser; it
