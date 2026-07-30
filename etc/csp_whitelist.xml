@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+    Content-Security-Policy origins the IdealData storefront pixel needs.
+
+    A store running Magento_Csp in restrict mode blocks the loader <script src>
+    and every ingest call unless these origins are whitelisted; this file is the
+    zero-dependency baseline that makes the canonical IdealData hosts work out of
+    the box (it is simply ignored if Magento_Csp is absent, and it only ever ADDS
+    sources — it can never narrow a merchant's existing policy).
+
+    Only the CANONICAL production origins belong here. A store the IdealData app
+    provisioned with a different loader/ingest URL is covered at runtime by
+    Model\Csp\PixelPolicyCollector, which derives the origins from the configured
+    values.
+
+    Declared globally (not etc/frontend/) so it also applies to the manual-snippet
+    fallback documented in the README, where the module's own layout injection is
+    not used.
+-->
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Csp:etc/csp_whitelist.xsd">
+    <policies>
+        <!-- The async pixel loader script. -->
+        <policy id="script-src">
+            <values>
+                <value id="tnw_idealdata_pixel_loader" type="host">https://pixel.idealdata.io</value>
+            </values>
+        </policy>
+        <!-- The SDK's ingest calls (/pixel-ingest/config, /pixel-ingest/collect). -->
+        <policy id="connect-src">
+            <values>
+                <value id="tnw_idealdata_pixel_ingest" type="host">https://my.idealdata.io</value>
+            </values>
+        </policy>
+        <!-- Only used if the SDK ever falls back to an image beacon for /collect. -->
+        <policy id="img-src">
+            <values>
+                <value id="tnw_idealdata_pixel_ingest_beacon" type="host">https://my.idealdata.io</value>
+            </values>
+        </policy>
+    </policies>
+</csp_whitelist>
