@@ -9,7 +9,7 @@ use Magento\Framework\Data\Form\Element\AbstractElement;
  * Read-only, informational admin block that shows a developer copy-paste
  * reference for binding storefront cart events to the pixel's public
  * `idealdataPixel(...)` API. It renders static guidance + snippets only — it
- * executes nothing and provisions nothing. Mirrors the Intro/Onboarding/Support
+ * executes nothing and provisions nothing. Mirrors the Intro/Support
  * blocks (a group-level frontend_model rendering a phtml with the shared
  * idealdata-config-* styling).
  */

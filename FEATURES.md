@@ -10,7 +10,7 @@ is largely read-only from the public-API standpoint and focuses on:
 - collecting data on failed payment transactions;
 - tracking cart origin (Cart A → Cart B lineage) for admin flows;
 - exposing REST endpoints for order statuses and failed transactions;
-- providing an adminhtml UI for onboarding/support.
+- providing an adminhtml UI that orients the merchant and points at support.
 
 Target Magento Framework version: `>=103.0.6` (Magento 2.4.x).
 Dependencies: `Magento_Catalog`, `Magento_CatalogInventory`, `Magento_InventoryApi`,
@@ -226,15 +226,22 @@ may have just written the row inside `createOrder()`).
 
 ### 1.11. Adminhtml UI
 
-**Files:** `etc/adminhtml/system.xml`, `etc/acl.xml`, `Block/Adminhtml/System/Config/{Intro,Onboarding,Support}.php`,
+**Files:** `etc/adminhtml/system.xml`, `etc/acl.xml`, `Block/Adminhtml/System/Config/{Intro,Support}.php`,
 `view/adminhtml/templates/system/config/*.phtml`, `view/adminhtml/web/css/idealdata.css`,
 `view/adminhtml/layout/adminhtml_system_config_edit.xml`, `view/adminhtml/web/images/idealdata-logo.png`.
 
-A dedicated **IDEALDATA.IO** tab appears in System → Configuration with three
-collapsible sections:
-- **Introduction** — marketing block with a "Request a Quote" button;
-- **Onboarding** — "Request Onboarding" button;
-- **Support** — "Open a ticket" button.
+A dedicated **IDEALDATA.IO** tab appears in System → Configuration with two
+collapsible sections (rewritten in 1.12 — the page is now an orientation page
+for merchants who installed from the Marketplace, styled with the Magento admin
+palette):
+- **Introduction** — what IdealData does, example signals, what to do next, and
+  two CTAs side by side ("Start your 15-day free trial" →
+  `https://my.idealdata.io`, "Or have someone walk you through it" → the
+  walkthrough booking link);
+- **Support** — points at the in-platform Support bubble; no button.
+
+The old **Onboarding** section ("Request Onboarding") was removed in 1.12 — its
+CTA now lives next to the trial CTA in the Introduction block.
 
 CSS renders a custom logo in the navigation; per-section toggle JS is inlined
 into each template. ACL: `TNW_Idealdata::config`.
@@ -441,7 +448,7 @@ because of `(string) $this->getData('product_id')` in `CartItemSnapshot::getProd
 
 ### 3.17. Inline JS in phtml templates
 
-`intro.phtml`, `onboarding.phtml`, `support.phtml` contain inline `<script>`
+`intro.phtml`, `support.phtml` contain inline `<script>`
 blocks with global functions. This is discouraged by Adobe Commerce 2.4+ CSP
 guidelines. Recommendation: extract into a RequireJS module loaded from
 `view/adminhtml/web/js`.

@@ -40,44 +40,175 @@
 .idealdata-collapsed .idealdata-config-title {
     border-bottom: 1px solid #cccccc;
 }
-.idealdata-custom-block h1 {
-    font-size: 20px;
-    margin-top: 0;
+/* ---------------------------------------------------------------------------
+   Introduction / Support blocks.
+   Palette is deliberately the Magento admin one (#303030 text, #757575 muted,
+   #d1d1d1/#e3e3e3 borders, #f5f5f5 panels, #eb5202 primary, #007bdb link,
+   #79a22e success) so the module does not look foreign inside Configuration.
+   --------------------------------------------------------------------------- */
+.idealdata-custom-block {
+    color: #303030;
+    max-width: 90rem;
+    padding-bottom: 1rem;
 }
-.idealdata-secondary-btn {
-    margin-left: 10px;
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-.idealdata-custom-block ul {
-    list-style: none;
-    padding-left: 20px;
-
-}
-.idealdata-custom-block li {
-    position: relative;
-    padding-left: 30px;
+.idealdata-custom-block p {
     line-height: 1.6;
 }
-.idealdata-custom-block li::before {
-    content: "✔";
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
+.idealdata-custom-block .idealdata-lede {
+    font-size: 1.8rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: .8rem 0 1.4rem;
+    color: #303030;
+}
+.idealdata-custom-block .idealdata-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: .025em;
+    color: #303030;
+    margin: 2.4rem 0 1rem;
+    padding-bottom: .6rem;
+    border-bottom: 1px solid #e3e3e3;
+}
+.idealdata-muted {
+    color: #757575;
+}
+
+/* Example-signal cards */
+.idealdata-signal-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    margin: 0 0 1.6rem;
+}
+.idealdata-signal-card {
+    flex: 1 1 32rem;
+    min-width: 26rem;
+    background: #f5f5f5;
+    border: 1px solid #e3e3e3;
+    border-left: 3px solid #eb5202;
+    border-radius: 2px;
+    padding: 1.2rem 1.4rem;
+}
+.idealdata-signal-card .idealdata-signal-label {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #eb5202;
+    margin-bottom: .4rem;
+}
+.idealdata-signal-card p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Checkmark list */
+.idealdata-checklist {
+    list-style: none;
+    padding-left: 0;
+    margin: 0 0 1.6rem;
+}
+.idealdata-checklist > li {
+    position: relative;
+    padding-left: 2.6rem;
+    line-height: 1.6;
+    margin-bottom: .8rem;
+}
+.idealdata-checklist > li::before {
+    content: '';
     position: absolute;
     left: 0;
-    top: 4px;
-    width: 14px;
-    height: 14px;
-    background-color: #28a745; /* зелёный квадрат */
-    color: #fff;
-    line-height: 14px;
-    font-family: Arial, sans-serif;
+    top: .5rem;
+    width: 1.4rem;
+    height: .7rem;
+    border-left: 2px solid #79a22e;
+    border-bottom: 2px solid #79a22e;
+    transform: rotate(-45deg);
 }
-.idealdata-custom-block .btn-class p {
-    display: inline;
-    margin-left: 10px;
-    color: #adadad;
+
+/* "What's watching your store" chips */
+.idealdata-tag-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0 0 1.2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .8rem;
+}
+.idealdata-tag-list > li {
+    background: #fff;
+    border: 1px solid #d1d1d1;
+    border-radius: 2px;
+    padding: .5rem 1.2rem;
+    line-height: 1.4;
+    color: #303030;
+}
+
+/* Numbered next steps */
+.idealdata-steps {
+    list-style: decimal outside;
+    padding-left: 2rem;
+    margin: 0 0 1.6rem;
+}
+.idealdata-steps > li {
+    line-height: 1.6;
+    margin-bottom: .8rem;
+    padding-left: .4rem;
+}
+
+/* Call to action */
+.idealdata-cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin: 2rem 0 .8rem;
+}
+.idealdata-btn {
+    display: inline-block;
+    padding: .8rem 1.6rem;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    font-size: 1.4rem;
+    font-weight: 600;
+    line-height: 1.6rem;
+    text-align: center;
+    text-decoration: none;
+    transition: background-color .1s linear, border-color .1s linear, color .1s linear;
+}
+.idealdata-btn:hover,
+.idealdata-btn:focus,
+.idealdata-btn:visited {
+    text-decoration: none;
+}
+.idealdata-btn-primary,
+.idealdata-btn-primary:visited {
+    background: #eb5202;
+    border-color: #eb5202;
+    color: #fff;
+}
+.idealdata-btn-primary:hover,
+.idealdata-btn-primary:focus {
+    background: #ba4000;
+    border-color: #ba4000;
+    color: #fff;
+}
+.idealdata-btn-secondary,
+.idealdata-btn-secondary:visited {
+    background: #fff;
+    border-color: #007bdb;
+    color: #007bdb;
+}
+.idealdata-btn-secondary:hover,
+.idealdata-btn-secondary:focus {
+    background: #007bdb;
+    border-color: #007bdb;
+    color: #fff;
+}
+.idealdata-cta-note {
+    margin-top: 0;
 }
 
 .idealdata-developer-snippets h4 {
