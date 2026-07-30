@@ -96,12 +96,13 @@
                 to type them in by hand.
             </p>
 
+            <?php /** @var \TNW\Idealdata\Block\Adminhtml\System\Config\Intro $block */ ?>
             <div class="idealdata-cta-row">
-                <a href="https://my.idealdata.io"
+                <a href="<?= $block->escapeUrl($block->getTrialUrl()) ?>"
                    target="_blank"
                    rel="noopener noreferrer"
                    class="idealdata-btn idealdata-btn-primary">Start your 15-day free trial</a>
-                <a href="https://idealdata.io/meetings/igorek12345/idealdata-walkthrough"
+                <a href="<?= $block->escapeUrl($block->getWalkthroughUrl()) ?>"
                    target="_blank"
                    rel="noopener noreferrer"
                    class="idealdata-btn idealdata-btn-secondary">Or have someone walk you through it</a>

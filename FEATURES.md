@@ -243,6 +243,33 @@ palette):
 The old **Onboarding** section ("Request Onboarding") was removed in 1.12 — its
 CTA now lives next to the trial CTA in the Introduction block.
 
+#### CTA attribution parameters
+
+`Block\Adminhtml\System\Config\Intro` builds both CTA URLs (rather than the
+template hard-coding them) so it can append attribution:
+
+| Param | Value | Purpose |
+|---|---|---|
+| `utm_source` | `magento_admin` | Fixed. The surface — distinct from a future Marketplace-listing source. |
+| `utm_medium` | `extension` | Fixed. Deliberately not `referral` (GA4 auto-assigns that). |
+| `utm_campaign` | `ac_module_intro` | Fixed. Names the surface, not a time-boxed promo. |
+| `utm_content` | `trial` / `walkthrough` | The only field that differs between the two buttons. |
+| `referrer` | admin domain, e.g. `admin.metalmafia.com` | Durable first-party attribution — meant to be persisted onto the account at signup, since UTMs die on redirect. |
+| `pv` | `2.4.7-p3` | `ProductMetadataInterface::getVersion()`. Omitted when it reports `UNKNOWN`. |
+| `pe` | `community` / `enterprise` / `b2b` | `ProductMetadataInterface::getEdition()`, lowercased. |
+| `mv` | `1.12.0` | This module's `setup_version`, so we can tell which shipped copy of the page produced the click. |
+
+The UTM triplet is a reporting contract with GA4/HubSpot — changing a value
+fragments historical data, so treat those three constants as append-only.
+`referrer` prefers the **configured** admin base URL host over the request's
+`Host` header (stable, and not client-controlled), falling back to the request
+host with any port stripped. Values that cannot be resolved are dropped rather
+than sent blank.
+
+> **Known risk:** if `my.idealdata.io` redirects (to a login or signup route)
+> without preserving the query string, every parameter above is lost. Worth
+> re-checking on the app side whenever that entry point changes.
+
 CSS renders a custom logo in the navigation; per-section toggle JS is inlined
 into each template. ACL: `TNW_Idealdata::config`.
 
