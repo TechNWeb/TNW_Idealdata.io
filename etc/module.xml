@@ -1,8 +1,10 @@
 <?xml version="1.0"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
-    <module name="TNW_Idealdata" setup_version="1.10.0">
+    <module name="TNW_Idealdata" setup_version="1.11.0">
         <sequence>
             <module name="Magento_Catalog"/>
+            <!-- etc/frontend/di.xml extends Magento\Csp\Model\CompositePolicyCollector. -->
+            <module name="Magento_Csp"/>
             <module name="Magento_CatalogInventory"/>
             <module name="Magento_InventoryApi"/>
             <module name="Magento_Customer"/>

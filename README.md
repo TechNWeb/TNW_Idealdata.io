@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.10 --no-update
+composer require tnw/module-idealdata=1.11 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -51,8 +51,8 @@ The app delivers the config to:
 
 ```
 PUT /rest/V1/tnw-idealdata/pixel-config
-{ "enabled": true, "ingestBase": "https://app.idealdata.io/pixel-ingest",
-  "loaderUrl": "https://app.idealdata.io/pixel/loader.js", "token": "idpx_…" }
+{ "enabled": true, "ingestBase": "https://my.idealdata.io/pixel-ingest",
+  "loaderUrl": "https://pixel.idealdata.io/loader.js", "token": "idpx_…" }
 ```
 
 It writes `tnw_idealdata_pixel/general/{enabled,ingest_base_url,loader_url,token}`
@@ -80,8 +80,8 @@ stored mirror and heal drift:
 ```
 GET /rest/V1/tnw-idealdata/pixel-config
 → { "enabled": true,
-    "ingest_base": "https://app.idealdata.io/pixel-ingest",
-    "loader_url": "https://app.idealdata.io/pixel/loader.js",
+    "ingest_base": "https://my.idealdata.io/pixel-ingest",
+    "loader_url": "https://pixel.idealdata.io/loader.js",
     "token_present": true,
     "token_sha256": "<sha-256 hex of the stored token>" }
 ```
@@ -100,8 +100,8 @@ same config values out-of-band with the Magento CLI:
 
 ```bash
 bin/magento config:set tnw_idealdata_pixel/general/enabled 1
-bin/magento config:set tnw_idealdata_pixel/general/ingest_base_url https://app.idealdata.io/pixel-ingest
-bin/magento config:set tnw_idealdata_pixel/general/loader_url https://app.idealdata.io/pixel/loader.js
+bin/magento config:set tnw_idealdata_pixel/general/ingest_base_url https://my.idealdata.io/pixel-ingest
+bin/magento config:set tnw_idealdata_pixel/general/loader_url https://pixel.idealdata.io/loader.js
 bin/magento config:set tnw_idealdata_pixel/general/token idpx_YOUR_TOKEN
 bin/magento cache:flush config full_page
 ```
@@ -117,16 +117,67 @@ Substitute your own token / ingest base / loader URL:
   window.idealdataSettings = {
     token: 'idpx_YOUR_TOKEN',
     platform: 'adobecommerce',
-    ingestBase: 'https://app.idealdata.io/pixel-ingest'
+    ingestBase: 'https://my.idealdata.io/pixel-ingest'
   };
 </script>
-<script async src="https://app.idealdata.io/pixel/loader.js"></script>
+<script async src="https://pixel.idealdata.io/loader.js"></script>
 ```
 
 > Do **not** add an inline-PHP `setCustomerId` line — it works only with Full
 > Page Cache disabled. The pixel reads the customer id client-side from the
 > `tnw-idealdata-identity` customer-data section instead (installed by this
 > module).
+
+### Content Security Policy (since 1.11)
+
+Stores that run Magento's **Content Security Policy** module in *restrict* mode
+block any script or network call to an origin that is not whitelisted. Without
+the origins below, the browser refuses to load the loader script and the pixel
+reports nothing — the store console shows
+`Loading the script 'https://…/loader.js' violates the following Content Security
+Policy directive: "script-src …"`.
+
+**You do not need to configure anything** — this module ships the whitelist:
+
+| Directive | Origin | Why |
+|-----------|--------|-----|
+| `script-src` | `https://pixel.idealdata.io` | the async pixel loader script |
+| `connect-src` | `https://my.idealdata.io` | the SDK's ingest calls (`/pixel-ingest/config`, `/pixel-ingest/collect`) |
+| `img-src` | `https://my.idealdata.io` | only used if the SDK falls back to an image beacon |
+
+Two layers provide this, so both a canonical and a custom deployment work:
+
+1. **`etc/csp_whitelist.xml`** — the canonical IdealData origins above, merged into
+   the store policy declaratively. Applies even on stores that use the manual
+   snippet instead of this module's layout injection.
+2. **A CSP policy collector** (`TNW\Idealdata\Model\Csp\PixelPolicyCollector`) —
+   derives the origins from the **configured** `loader_url` / `ingest_base_url` at
+   request time and adds them to the storefront policy. A store the IdealData app
+   provisioned with a non-canonical URL (staging, a per-tenant CDN hostname) is
+   therefore whitelisted automatically, with no module release and no merchant
+   action. It adds nothing at all while the pixel is disabled, and ignores a
+   malformed URL rather than widening the policy.
+
+Both layers only ever **add** sources; neither can narrow a policy the merchant
+already has. The storefront policy is affected — the admin policy is untouched.
+
+The inline `window.idealdataSettings` snippet and the loader `<script>` tag are
+rendered through Magento's `SecureHtmlRenderer`, so both carry the request's CSP
+nonce on stores using nonce-based CSP. (Under CSP, a nonce in `script-src` makes
+browsers ignore `'unsafe-inline'` — a hand-written inline tag would stop executing
+there, silently leaving the loader with no configuration.)
+
+If a store has its own hardened policy that this does not reach, add the origins
+in any module's `etc/csp_whitelist.xml`:
+
+```xml
+<policy id="script-src">
+    <values><value id="idealdata_pixel_loader" type="host">https://pixel.idealdata.io</value></values>
+</policy>
+<policy id="connect-src">
+    <values><value id="idealdata_pixel_ingest" type="host">https://my.idealdata.io</value></values>
+</policy>
+```
 
 ### Debug logging (local troubleshooting — since 1.8)
 

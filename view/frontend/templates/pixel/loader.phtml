@@ -9,19 +9,40 @@
  * so NO inline-PHP customer id is emitted here — that path is broken under Full
  * Page Cache. Renders nothing unless the pixel is enabled + fully configured.
  *
+ * Both tags go through $secureRenderer so Magento_Csp stamps the request nonce
+ * on them. This is NOT cosmetic: under CSP the presence of a nonce source in
+ * `script-src` makes browsers IGNORE 'unsafe-inline', so a hand-written inline
+ * <script> stops executing the moment a store switches to nonce-based CSP —
+ * silently, leaving the loader to boot with no window.idealdataSettings and the
+ * pixel to send nothing. The loader origin itself is whitelisted separately (see
+ * etc/csp_whitelist.xml + Model\Csp\PixelPolicyCollector).
+ *
  * @var \TNW\Idealdata\Block\Pixel\Loader $block
  * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
  */
 if (!$block->isPixelEnabled()) {
     return;
 }
-?>
-<script type="text/javascript">
+
+$token = $escaper->escapeJs($block->getToken());
+$platform = $escaper->escapeJs($block->getPlatform());
+$ingestBase = $escaper->escapeJs($block->getIngestBaseUrl());
+$debug = $block->isDebugEnabled() ? 'true' : 'false';
+
+$settingsJs = <<<JS
     window.idealdataSettings = {
-        token: '<?= $escaper->escapeJs($block->getToken()) ?>',
-        platform: '<?= $escaper->escapeJs($block->getPlatform()) ?>',
-        ingestBase: '<?= $escaper->escapeJs($block->getIngestBaseUrl()) ?>',
-        debug: <?= $block->isDebugEnabled() ? 'true' : 'false' ?>
+        token: '{$token}',
+        platform: '{$platform}',
+        ingestBase: '{$ingestBase}',
+        debug: {$debug}
     };
-</script>
-<script async src="<?= $escaper->escapeUrl($block->getLoaderUrl()) ?>"></script>
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $settingsJs, false) ?>
+<?= /* @noEscape */ $secureRenderer->renderTag(
+    'script',
+    ['async' => 'async', 'src' => $block->getLoaderUrl()],
+    '',
+    false
+) ?>
