@@ -4,39 +4,114 @@
     </div>
     <div class="idealdata-config-content">
         <div class="idealdata-custom-block">
+            <p class="idealdata-lede">Your reports are not wrong. They are late.</p>
+
             <p>
-                Integrating your Magento platform with a Customer Relationship Management (CRM) system
-                can significantly enhance your business operations by automating processes, reducing errors,
-                and providing comprehensive customer insights.
+                This module is the store-side half of IdealData. On its own it stays quiet: it exposes the
+                secure endpoints and the storefront pixel that the IdealData platform uses to watch this store.
+                Connect it to an IdealData account and the watching starts &mdash; there is nothing to configure
+                on this page.
             </p>
 
             <p>
-                IdealData.io specializes in seamless Magento-CRM integrations, delivering tangible benefits:
+                Dashboards wait for you to come look. Reports tell you what already happened. IdealData watches
+                your store around the clock and taps you on the shoulder the moment something important happens,
+                with enough context to act right away.
             </p>
 
-            <ul>
-                <li><strong>Increased Sales:</strong> Achieve up to a 25% close rate on abandoned cart deals through automated recovery strategies.</li>
-                <li><strong>Operational Efficiency:</strong> Eliminate manual errors with automated product synchronization between Magento and your CRM.</li>
-                <li><strong>Real-Time Analytics:</strong> Access revenue dashboards for instant sales tracking and informed decision-making.</li>
-                <li><strong>Personalized Marketing:</strong> Utilize data-driven insights to craft targeted marketing campaigns that resonate with your audience.</li>
+            <h4 class="idealdata-heading">Signals merchants act on every day</h4>
+
+            <div class="idealdata-signal-grid">
+                <div class="idealdata-signal-card">
+                    <span class="idealdata-signal-label">Time to call</span>
+                    <p>Sarah Smith added 2 products to her cart and is browsing right now. She was forecasted to
+                        place an order yesterday. Average order $3,245.98, lifetime value $45,876.72.</p>
+                </div>
+                <div class="idealdata-signal-card">
+                    <span class="idealdata-signal-label">Missed order</span>
+                    <p>John Smith at Acme Industrial orders about every 30 days. No order in 32. He hasn&rsquo;t
+                        called or visited, but he opened last week&rsquo;s email. Worth reconnecting today.</p>
+                </div>
+                <div class="idealdata-signal-card">
+                    <span class="idealdata-signal-label">Pricing error</span>
+                    <p>Video Camera was priced at $129.00 and is now $12.90. Flagged for your immediate
+                        review.</p>
+                </div>
+                <div class="idealdata-signal-card">
+                    <span class="idealdata-signal-label">High-value cart</span>
+                    <p>$6,247 cart abandoned, 2.4&times; your average order. The customer returned 28 minutes ago
+                        and left without completing it. Might be worth a call.</p>
+                </div>
+            </div>
+
+            <h4 class="idealdata-heading">Signal, then action. Every time.</h4>
+
+            <ul class="idealdata-checklist">
+                <li>Low stock comes with the reorder quantity and timing, so you order the right amount instead
+                    of guessing.</li>
+                <li>A pricing problem reaches you while it is still a mistake, not an order you have to
+                    honor.</li>
+                <li>An overdue reorder arrives with the account, how late it is, and the full purchase history.
+                    The call writes itself.</li>
             </ul>
 
-            <p>
-                As an Adobe Commerce Bronze Partner, IdealData.io has a proven track record with many multi-million and billion dollar corporations with large volumes of data traveling between platforms on daily basis.
+            <h4 class="idealdata-heading">What&rsquo;s watching your store</h4>
+
+            <ul class="idealdata-tag-list">
+                <li>High-value carts</li>
+                <li>VIP customers walking away</li>
+                <li>Customers online and shopping</li>
+                <li>Products about to run out</li>
+                <li>Prices that look wrong</li>
+                <li>Customers overdue to reorder</li>
+            </ul>
+
+            <p class="idealdata-muted">
+                New signals ship regularly. Alerts arrive in Slack, Microsoft Teams, or in-app &mdash; wherever
+                your team already works. Signals get sharper with context from the tools around your store, such
+                as Google Analytics 4, Google Search Console, HubSpot, CallRail and Skubana.
             </p>
 
+            <h4 class="idealdata-heading">What to do next</h4>
+
+            <ol class="idealdata-steps">
+                <li>
+                    <strong>Start your free trial.</strong> Create your IdealData workspace &mdash; it takes a
+                    couple of minutes.
+                </li>
+                <li>
+                    <strong>Connect this store.</strong> Add your Adobe Commerce / Magento store in IdealData and
+                    follow the connection steps. IdealData walks you through creating the Magento integration it
+                    needs to read your store data.
+                </li>
+                <li>
+                    <strong>Choose your signals and where they land.</strong> Pick the alerts that matter to your
+                    business and send them to Slack, Microsoft Teams, or in-app.
+                </li>
+            </ol>
+
             <p>
-                Discover how IdealData.io can transform your sales and marketing efforts by seamlessly connecting Magento with your CRM platform.
+                Everything under <strong>Storefront Pixel</strong> in the menu on the left is then provisioned
+                for you by the IdealData platform. Those fields are read-only on purpose &mdash; you never need
+                to type them in by hand.
             </p>
 
-            <p><strong>Just getting started?</strong></p>
-            <div class="btn-class">
-                <button onclick="window.open('https://idealdata.io/get-a-quote','_blank');" class="action-default scalable save primary ui-button ui-corner-all ui-widget">
-                    Request a Quote
-                </button>
-                <button class="action-default scalable disabled idealdata-secondary-btn">Free Trial</button>
-                <p>Coming soon</p>
+            <?php /** @var \TNW\Idealdata\Block\Adminhtml\System\Config\Intro $block */ ?>
+            <div class="idealdata-cta-row">
+                <a href="<?= $block->escapeUrl($block->getTrialUrl()) ?>"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="idealdata-btn idealdata-btn-primary">Start your 15-day free trial</a>
+                <a href="<?= $block->escapeUrl($block->getWalkthroughUrl()) ?>"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="idealdata-btn idealdata-btn-secondary">Or have someone walk you through it</a>
             </div>
+
+            <p class="idealdata-muted idealdata-cta-note">
+                Most of our customers find opportunities within their first week that their existing tools had
+                not surfaced.
+            </p>
         </div>
     </div>
 </div>
