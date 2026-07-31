@@ -49,9 +49,18 @@ Reports logged-in-customer presence + activity to IdealData. Two on-store pieces
    SDK's native-event layer to hook — it hooks `private-content-loaded` plus a
    `mage-cache-storage` watch, with the baseline persisted in `localStorage` so
    non-AJAX form posts are caught on the next page load. Theme-agnostic on purpose:
-   it runs on Luma too and de-duplicates against the SDK's auto-capture. The
-   suppression rules (login/logout, order-success, stale baseline, absent section,
-   multi-tab) are the safety-critical part — see the file header and README.
+   it runs on Luma too. **Ownership split (do not "simplify"):** the SDK's de-dup is
+   ONE-DIRECTIONAL (an explicit `track()` suppresses only the auto-capture diff that
+   FOLLOWS it) and `cartAutoCapture` comes per-store from ingest, so the bridge
+   reports ONLY while `window.idealdataPixelCore` (the SDK core global) is absent —
+   the SDK can only report changes it sees after its core seeds its baseline, so the
+   two can never both report one action. The suppression rules (login/logout,
+   order-success, stale baseline, absent section, multi-tab) are the other
+   safety-critical part — see the file header and README.
+   Root cause of the Hyvä gap lives in `idealdata3-pixel`: the collector's baseline
+   is in-memory per page load, so an add that NAVIGATES is lost. Persisting it there
+   would fix Hyvä store-wide without a module release — worth doing, and it must be
+   coordinated with this bridge's ownership rule if it happens.
 
 ### Config is app-provisioned (do not ask the merchant to type it)
 

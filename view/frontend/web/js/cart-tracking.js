@@ -34,10 +34,44 @@
  * non-AJAX form posts that navigate away (the diff is computed on the next page
  * load, since the baseline is persisted).
  *
- * It is deliberately theme-agnostic (vanilla ES5-ish, no jQuery, no Alpine, no
- * RequireJS, no framework globals) and runs on Luma too: explicit `track` calls
- * de-duplicate against the SDK's own auto-capture within a short window and the
- * explicit call wins, so double counting is not a risk.
+ * It is deliberately theme-agnostic: vanilla ES5-ish, no jQuery, no Alpine, no
+ * RequireJS, no framework globals. It runs on Luma too, but only where the SDK
+ * cannot — see the ownership rule below.
+ *
+ * WHO OWNS A CART EVENT (do not "simplify" this away)
+ * --------------------------------------------------
+ * The SDK's cross-layer de-duplication is ONE-DIRECTIONAL: an explicit
+ * `track()` call suppresses the auto-capture diff that FOLLOWS it, but an
+ * explicit call that arrives AFTER an auto-capture emit is not suppressed. So
+ * reporting a change the SDK also reports would double-count it, and the SDK's
+ * `cartAutoCapture` switch is delivered per store from ingest — the module
+ * cannot turn it off. Ownership is therefore split on the one thing that is
+ * observable from here, `window.idealdataPixelCore` (the core bundle's global,
+ * present only once the SDK's collectors are running):
+ *
+ * we report a change only while that global is ABSENT; once it is there, the SDK
+ * owns live cart changes and we merely advance our baseline.
+ *
+ * That single rule is enough, because the SDK can only ever report a change it
+ * observes AFTER its core starts — it seeds its cart baseline from the section
+ * cache at that moment. So:
+ *
+ *  - Hyvä's lost add (form POST → navigation → the section refetch that follows
+ *    the page load) is normally observed by us before the SDK's core is up: the
+ *    SDK's seed then already contains it and it never reports it, so our report
+ *    is the only one. This is the gap the whole bridge exists for.
+ *  - If instead the SDK's core came up first, it diffs that same refetch itself
+ *    and reports it — and we stay silent, because the global is present.
+ *  - A live in-page change (mini-cart qty, drawer remove, Luma's click-time
+ *    add-to-cart) always happens with the core up, so it is always the SDK's.
+ *
+ * Net effect: the shopper action Hyvä loses today is reported exactly once,
+ * Luma keeps behaving exactly as it does now, and neither side double-counts.
+ *
+ * ⚠️ COUPLING: this assumes the SDK's auto-capture is enabled (it is — ingest
+ * does not emit `cartAutoCapture` today, so the default `true` applies). If
+ * IdealData ever sets `cartAutoCapture:false` for an Adobe Commerce store, this
+ * bridge must be told as well, or live cart changes will be reported by nobody.
  *
  * SAFETY RULES (each one is a false-event source we have to not fire on)
  * ---------------------------------------------------------------------
@@ -83,6 +117,13 @@
 
     /** Our persisted cart baseline (shared across tabs of the same origin). */
     var STATE_KEY = 'idealdata-pixel-cart-state';
+
+    /**
+     * The SDK core bundle's global. Its presence means the SDK's own cart
+     * collectors are running and own live cart changes (see the ownership rule
+     * in the header).
+     */
+    var CORE_GLOBAL = 'idealdataPixelCore';
 
     var POLL_MS = 1000;
     var STALE_MS = 30 * 60 * 1000;
@@ -445,6 +486,18 @@
         });
     }
 
+    /**
+     * True once the SDK's core bundle is loaded, i.e. its own cart collectors are
+     * live. See the ownership rule in the header.
+     */
+    function sdkOwnsLiveCartEvents() {
+        try {
+            return !!window[CORE_GLOBAL];
+        } catch (e) {
+            return false;
+        }
+    }
+
     function process(sectionData) {
         handleIdentity(sectionData);
 
@@ -475,6 +528,14 @@
 
         if (reason) {
             log('baseline reset without reporting: ' + reason);
+            return;
+        }
+
+        // The SDK's collectors are up, so this is a live change and it is theirs:
+        // reporting it too would double-count (the SDK's de-dup only suppresses
+        // what comes AFTER an explicit call, never before).
+        if (events.length && sdkOwnsLiveCartEvents()) {
+            log('live change left to the pixel SDK (core loaded), baseline advanced');
             return;
         }
 
@@ -536,7 +597,9 @@
                 checkStorage();
             }
         }));
-        window.addEventListener('pageshow', guard(checkStorage));
+        window.addEventListener('pageshow', guard(function () {
+            checkStorage();
+        }));
         document.addEventListener('visibilitychange', guard(function () {
             if (!document.hidden) {
                 checkStorage();
@@ -550,7 +613,10 @@
             }
         }), POLL_MS);
 
-        log('active (' + (window.hyva ? 'hyva' : (window.jQuery ? 'luma' : 'unknown')) + ' runtime)');
+        log(
+            'active (' + (window.hyva ? 'hyva' : (window.jQuery ? 'luma' : 'unknown')) + ' runtime, '
+            + (sdkOwnsLiveCartEvents() ? 'SDK core already up' : 'SDK core not up yet') + ')'
+        );
 
         // Read straight away: after a non-AJAX add-to-cart the shopper is already
         // on the next page by the time we run, and the change is waiting in the

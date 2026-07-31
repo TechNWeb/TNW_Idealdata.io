@@ -31,6 +31,7 @@ const STALE_MS = 30 * 60 * 1000;
  */
 function boot(options) {
     const settings = Object.assign({ debug: false }, (options || {}).settings);
+    const withSdkCore = (options || {}).withSdkCore === true;
     const pathname = (options || {}).pathname || '/';
     const withPixel = (options || {}).withPixel !== false;
 
@@ -86,6 +87,10 @@ function boot(options) {
         };
     }
 
+    if (withSdkCore) {
+        windowStub.idealdataPixelCore = { initCore() {} };
+    }
+
     const documentStub = {
         hidden: false,
         currentScript: {
@@ -137,6 +142,10 @@ function boot(options) {
             windowStub.idealdataPixel = function () {
                 calls.push(Array.prototype.slice.call(arguments));
             };
+        },
+        /** Simulates the SDK core bundle finishing its load. */
+        attachSdkCore() {
+            windowStub.idealdataPixelCore = { initCore() {} };
         },
         advanceClock(ms) {
             now += ms;
@@ -521,6 +530,65 @@ const tests = {
                 [['setCustomerId', '7']]
             );
         });
+    },
+
+    'a change is left to the SDK once its core is loaded (no double counting)'() {
+        const harness = boot({ withSdkCore: true });
+        harness.setSections({ cart: cart([]) });
+        harness.poll();
+
+        harness.setSections({ cart: cart([line(1, 100, 1)]) });
+        harness.poll();
+
+        assert.deepStrictEqual(trackCalls(harness), []);
+    },
+
+    'the baseline still advances while the SDK owns reporting'() {
+        const harness = boot({ withSdkCore: true });
+        harness.setSections({ cart: cart([]) });
+        harness.poll();
+        harness.setSections({ cart: cart([line(1, 100, 1)]) });
+        harness.poll();
+
+        // The SDK reported that add. If the baseline had not advanced, the next
+        // observation would re-report the whole cart.
+        harness.setSections({ cart: cart([line(1, 100, 2)]) });
+        harness.poll();
+
+        assert.deepStrictEqual(trackCalls(harness), []);
+    },
+
+    'a change observed before the SDK core is up IS reported (the Hyvä gap)'() {
+        const harness = boot();
+        harness.setSections({ cart: cart([]) });
+        harness.poll();
+
+        // Hyvä's post-navigation section refetch, before the SDK core has loaded.
+        harness.dispatchPrivateContent({ cart: cart([line(1, 100, 1)]) });
+
+        assert.strictEqual(trackCalls(harness).length, 1);
+
+        // Once the core is up, live changes are the SDK's again.
+        harness.attachSdkCore();
+        harness.setSections({ cart: cart([line(1, 100, 3)]) });
+        harness.poll();
+
+        assert.strictEqual(trackCalls(harness).length, 1);
+    },
+
+    'identity is still pinned while the SDK owns cart reporting'() {
+        const harness = boot({ withSdkCore: true });
+        harness.setSections({
+            cart: cart([]),
+            customer: { firstname: 'Sam' },
+            'tnw-idealdata-identity': { customer_id: 42 }
+        });
+        harness.poll();
+
+        assert.deepStrictEqual(
+            harness.calls.filter((call) => call[0] === 'setCustomerId'),
+            [['setCustomerId', '42']]
+        );
     },
 
     'a broken section cache does not throw or report'() {

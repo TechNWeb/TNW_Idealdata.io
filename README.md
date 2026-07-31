@@ -280,11 +280,50 @@ Each event carries `productId` (numeric, as a string), `variantId` (the line's
 SKU), `title`, the `quantity` **delta** for that action, and `cartTotalQuantity`
 summed from the cart lines.
 
-The bridge runs on **Luma too**, deliberately: explicit `track` calls de-duplicate
-against the SDK's own auto-capture within a short window and the explicit call
-wins, so it cannot double-count. It needs **no CSP entry** — the file is served
-from the store's own static base URL, so any policy that already allows the
-theme's JavaScript allows this.
+It needs **no CSP entry** — the file is served from the store's own static base
+URL, so any policy that already allows the theme's JavaScript allows this.
+
+**Who owns an event (why this cannot double-count).** The SDK's cross-layer
+de-duplication is **one-directional**: an explicit `track()` call suppresses the
+auto-capture diff that *follows* it, but an explicit call arriving *after* an
+auto-capture emit is not suppressed — and `cartAutoCapture` is delivered per store
+from ingest, so the module cannot switch the SDK's capture off. Ownership is
+therefore split on the one thing observable from the storefront:
+`window.idealdataPixelCore`, the SDK core bundle's global, which exists only once
+its collectors are running. **The bridge reports only while that global is
+absent.** That is sufficient because the SDK can only report a change it observes
+*after* its core starts — it seeds its cart baseline from the section cache at
+that moment:
+
+- Hyvä's lost add (form POST → navigation → the section refetch that follows the
+  page load) is normally observed by the bridge before the SDK's core is up. The
+  SDK's baseline seed then already contains it, so the SDK never reports it and
+  the bridge's report is the only one. **This is the gap the bridge exists for.**
+- If the SDK's core came up first, it diffs that same refetch itself and reports
+  it — and the bridge stays silent.
+- A live in-page change (mini-cart qty, drawer remove, Luma's click-time
+  add-to-cart) always happens with the core up, so it is always the SDK's.
+
+So Luma behaves exactly as it does today, Hyvä's missing adds start arriving, and
+neither side reports the same action twice.
+
+> **Root cause, for the record.** The SDK's cart collector keeps its baseline
+> **in memory for one page load** (`prevSummaryCount`, seeded at `start()`, with
+> the first section reload suppressed so a page load cannot emit a phantom event).
+> On Luma that is fine — adds are in-page AJAX, so they happen with the collector
+> already bound. On Hyvä the PDP/listing add is a form POST that **navigates**, so
+> the only trace is a section refetch right after the next page load — which the
+> async SDK usually has not loaded in time to see, and which its first-snapshot
+> guard would swallow anyway. Persisting that baseline across page loads in the
+> SDK (`idealdata3-pixel`) would fix Hyvä for every Adobe Commerce store without a
+> module release; this bridge is the module-side fix and is scoped so the two
+> cannot collide.
+>
+> ⚠️ **Coupling to watch:** the split assumes the SDK's auto-capture is **on**
+> (ingest does not emit `cartAutoCapture` today, so the `true` default applies). If
+> IdealData ever sets `cartAutoCapture:false` for an Adobe Commerce store, this
+> bridge has to be told too — otherwise live in-page cart changes would be
+> reported by nobody.
 
 **It will not invent shopper activity.** Each of these is a false-event source
 that is explicitly handled:
