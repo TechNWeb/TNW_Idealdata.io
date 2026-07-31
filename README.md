@@ -8,10 +8,11 @@ composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
 
-## Storefront Pixel (customer presence)
+## Storefront Pixel (customer presence + cart activity)
 
 Since 1.5 the module can inject the **IdealData storefront pixel**, which reports
-logged-in-customer presence ("online now") to IdealData. It does two things:
+logged-in-customer presence ("online now") and cart activity to IdealData. It does
+three things:
 
 1. **Exposes the logged-in customer id to storefront JavaScript** via a dedicated
    customer-data section (`tnw-idealdata-identity`). Because this loads through
@@ -19,6 +20,9 @@ logged-in-customer presence ("online now") to IdealData. It does two things:
    is depersonalization-safe — unlike inline PHP, which FPC strips on cacheable
    pages.
 2. **Injects the async pixel loader** on every storefront page (gated by config).
+3. **Reports `cart.add` / `cart.remove`** from a theme-agnostic cart-tracking bridge
+   (since 1.15), which is what makes cart capture work on **Hyvä** as well as Luma —
+   see "Cart tracking on any theme" below.
 
 ### Enabling (app-provisioned — since 1.6)
 
@@ -399,14 +403,17 @@ pages at all, so there is nothing to verify and the console stays silent.
 5. For any surface that didn't fire, add the matching snippet (below) to that theme
    control's handler, and re-test with debug on until every cart surface logs an event.
 
-Auto-capture covers most standard flows out of the box; manual binding is only for
-the gaps this procedure surfaces (custom themes, custom widgets, non-standard
-add-to-cart). Adding a binding defensively where auto-capture already works is safe —
-explicit calls and auto-capture **de-dupe against each other** within a short window
-(explicit wins), so you won't double-count. (Concretely: a PDP/listing add usually
-fires the native Magento event, a mini-cart qty change is often caught only by the
-section-diff safety net, and a custom widget might fire neither — hence exercising
-**all** surfaces, not just the catalog.)
+Auto-capture covers standard flows on Hyvä and Luma out of the box; manual binding is
+only for the gaps this procedure surfaces (a custom theme that bypasses the cart
+section, a checkout that changes the cart without a page or section update).
+**Bind only the surfaces that logged nothing.** De-dup is **one-directional**: an
+explicit call suppresses auto-capture that happens *after* it (same action + same
+`productId`, within `cartDedupWindowMs` — default 1000ms), but it cannot suppress
+capture that already fired, so a snippet on an already-tracked control is counted
+twice. (Concretely: a Luma PDP/listing add fires the native Magento event at click
+time, so instrumenting it by hand would double-count; a mini-cart qty change is often caught
+only by the section diff; a Hyvä add-to-cart that reloads the page is carried by this
+module's bridge — hence exercising **all** surfaces, not just the catalog.)
 
 ### Developer: manual cart-event binding (informational — since 1.9)
 
@@ -418,11 +425,15 @@ events to the pixel explicitly. It is **purely informational** — it displays c
 to copy and runs nothing; it is always visible in the pixel config area and gated
 behind nothing.
 
-Cart events are captured **automatically** on Adobe Commerce (native Magento
-events + a customer-data section diff), so no code is required for the common case.
+Cart events are captured **automatically** on Adobe Commerce — native Magento events
+plus a customer-data section diff, with this module's bridge covering themes that
+dispatch no add-to-cart event (Hyvä) — so no code is required for the common case.
 Manual binding via the public `idealdataPixel('track', 'cart.add' | 'cart.remove',
 {...})` API is for precise, theme-known context or coverage the auto-capture does
-not reach; explicit calls de-dupe against auto-capture (explicit wins). The panel
+not reach. It must be called **at the moment of the cart change** and only on
+surfaces that are not already tracked: an explicit call suppresses the auto-capture
+that *follows* it, never capture that already fired (see the ownership section
+above). The panel
 also shows the manual-identity snippet
 (`idealdataPixel('setCustomerId', '<numericId>')`) for custom themes. Full API
 reference: the `idealdata3-pixel` repo README ("Public API").

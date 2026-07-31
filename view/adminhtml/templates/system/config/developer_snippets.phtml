@@ -81,9 +81,12 @@
                 Auto-capture covers standard flows on Hyvä and Luma out of the box — manual binding is
                 only for the gaps this procedure surfaces (a custom theme that bypasses the cart
                 section, a checkout that changes the cart without a page or section update).
-                It is safe to add a binding defensively even where auto-capture already works: explicit
-                calls and automatic capture <strong>de-duplicate against each other</strong> within a
-                short window (explicit wins), so you will not double-count.
+                <strong>Bind only the surfaces that logged nothing.</strong> De-duplication works in
+                one direction: an explicit call suppresses automatic capture that happens
+                <em>after</em> it (same action and same <code>productId</code>, within about a
+                second), but it cannot suppress capture that has already fired. A snippet added to a
+                control that is already tracked would therefore be counted twice — most obviously a
+                Luma add-to-cart, where the native Magento event fires the moment the shopper clicks.
             </p>
 
             <h4>Manual cart-event binding</h4>
@@ -99,12 +102,24 @@
                 automatic capture does not reach.
             </p>
             <p>
-                Explicit calls and automatic capture <strong>de-duplicate against each
-                other</strong> (same action + product within a short window), and the
-                explicit call wins — so adding these snippets will not double-count. If you
-                want to rely <em>only</em> on explicit calls, ask IdealData to set
-                <code>cartAutoCapture: false</code> for this store to turn the automatic
-                capture off.
+                <strong>Where to put the call:</strong> in the handler that performs the cart
+                change, so it runs at the moment of the action rather than in a delayed
+                callback. An explicit call suppresses the automatic capture that
+                <em>follows</em> it — same action and the same <code>productId</code>, within
+                about a second — and that is what keeps an instrumented control from being
+                counted twice. <strong>The reverse does not hold:</strong> capture that has
+                already fired cannot be suppressed, so do not add a snippet to a control the
+                procedure above already showed as tracked, and send the same numeric
+                <code>productId</code> the cart uses (a different id or none of its own is a
+                different event, and will not collapse).
+            </p>
+            <p>
+                To rely <em>only</em> on explicit calls, ask IdealData to set
+                <code>cartAutoCapture: false</code> for this store — that turns the pixel's
+                own automatic capture off. Tell IdealData if you need cart capture off
+                <em>entirely</em>: this module also reports a cart change it detects before the
+                pixel has finished loading, which is what covers themes that reload the page on
+                add-to-cart.
             </p>
             <p>
                 All snippets use the global <code>idealdataPixel(...)</code> function. It is

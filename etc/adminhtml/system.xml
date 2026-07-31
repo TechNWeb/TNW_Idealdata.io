@@ -21,7 +21,7 @@
             <resource>TNW_Idealdata::config</resource>
             <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Storefront Pixel</label>
-                <comment><![CDATA[Injects the IdealData storefront pixel so logged-in customers report "online now" presence. <strong>These values are managed automatically by the IdealData app</strong> — enable the pixel on your Adobe Commerce connection there and the token + URLs below are delivered to this store for you. The fields are read-only; you do not need to edit them.]]></comment>
+                <comment><![CDATA[Injects the IdealData storefront pixel so logged-in customers report "online now" presence and cart activity. Works on <strong>Hyvä and Luma</strong> themes out of the box — no theme changes and no code to write. <strong>These values are managed automatically by the IdealData app</strong> — enable the pixel on your Adobe Commerce connection there and the token + URLs below are delivered to this store for you. The fields are read-only; you do not need to edit them.]]></comment>
                 <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Enable Pixel</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
