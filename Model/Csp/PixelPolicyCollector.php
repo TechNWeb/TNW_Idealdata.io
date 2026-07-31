@@ -6,6 +6,8 @@ namespace TNW\Idealdata\Model\Csp;
 
 use Magento\Csp\Api\PolicyCollectorInterface;
 use Magento\Csp\Model\Policy\FetchPolicy;
+use Magento\Framework\App\Area;
+use Magento\Framework\App\State;
 use TNW\Idealdata\Model\Pixel\Config;
 
 /**
@@ -23,15 +25,20 @@ use TNW\Idealdata\Model\Pixel\Config;
  * Gated exactly like the snippet injection (Config::isPixelEnabled): a disabled
  * or half-configured pixel widens the policy by nothing at all.
  *
- * Registered into Magento\Csp\Model\CompositePolicyCollector in etc/frontend/di.xml
- * (frontend area only — admin CSP is untouched). Runs when the header is built by
- * Magento\Csp\Observer\Render, i.e. on every response, rather than depending on the
- * loader block having rendered.
+ * Registered into Magento\Csp\Model\CompositePolicyCollector in the module's GLOBAL
+ * etc/di.xml — registering it from an area scope replaces core's whole `collectors`
+ * array and breaks the storefront policy (see the comment there). Because the
+ * registration is global, this collector is instantiated in every area, so the
+ * storefront-only scope is enforced here in PHP: the admin policy is untouched.
+ *
+ * Runs when the header is built by Magento\Csp\Observer\Render, i.e. on every
+ * response, rather than depending on the loader block having rendered.
  */
 class PixelPolicyCollector implements PolicyCollectorInterface
 {
     public function __construct(
-        private readonly Config $pixelConfig
+        private readonly Config $pixelConfig,
+        private readonly State $appState
     ) {
     }
 
@@ -41,7 +48,7 @@ class PixelPolicyCollector implements PolicyCollectorInterface
      */
     public function collect(array $defaultPolicies = []): array
     {
-        if (!$this->pixelConfig->isPixelEnabled()) {
+        if (!$this->isFrontend() || !$this->pixelConfig->isPixelEnabled()) {
             return $defaultPolicies;
         }
 
@@ -62,6 +69,22 @@ class PixelPolicyCollector implements PolicyCollectorInterface
         }
 
         return $policies;
+    }
+
+    /**
+     * The pixel is a storefront feature, so only the storefront policy is widened.
+     *
+     * State::getAreaCode() throws when no area has been set yet (early bootstrap,
+     * some CLI paths); treat that as "not the storefront" rather than letting it
+     * escape — a policy collector must never break the response.
+     */
+    private function isFrontend(): bool
+    {
+        try {
+            return $this->appState->getAreaCode() === Area::AREA_FRONTEND;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**

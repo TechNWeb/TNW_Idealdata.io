@@ -4,28 +4,15 @@
     section name `tnw-idealdata-identity`. The section name is the key both
     sections.xml (invalidation) and localStorage['mage-cache-storage'] (the
     persisted client-side cache the pixel SDK reads) use — keep them in sync.
+
+    The CSP policy collector is deliberately NOT registered here. Declaring an
+    argument for Magento\Csp\Model\CompositePolicyCollector from an AREA scope
+    REPLACES the whole `collectors` array core declares in the GLOBAL scope, which
+    silently disables every core collector on the storefront. It lives in the
+    module's global etc/di.xml instead — see the comment there.
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
-    <!--
-        Adds the CONFIGURED pixel origins to the storefront CSP header, so a store
-        provisioned with a non-canonical loader/ingest URL (staging, a legacy CDN
-        hostname) is whitelisted without a module release. The canonical origins
-        ship statically in etc/csp_whitelist.xml.
-
-        Core wires its own collectors as config=1, whitelist=2, dynamic=3,
-        controller=100; sortOrder 15 places this after the merchant's own
-        csp_whitelist.xml and before controller-level overrides. \Proxy matches how
-        core wires its collectors (the header is not built on every request).
-        Frontend area only — the admin CSP is untouched.
-    -->
-    <type name="Magento\Csp\Model\CompositePolicyCollector">
-        <arguments>
-            <argument name="collectors" xsi:type="array">
-                <item name="tnw_idealdata_pixel" xsi:type="object" sortOrder="15">TNW\Idealdata\Model\Csp\PixelPolicyCollector\Proxy</item>
-            </argument>
-        </arguments>
-    </type>
     <type name="Magento\Customer\CustomerData\SectionPool">
         <arguments>
             <argument name="sectionSourceMap" xsi:type="array">
