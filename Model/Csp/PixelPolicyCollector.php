@@ -57,6 +57,12 @@ class PixelPolicyCollector implements PolicyCollectorInterface
         $loaderOrigin = $this->extractOrigin($this->pixelConfig->getLoaderUrl());
         if ($loaderOrigin !== null) {
             $policies[] = new FetchPolicy('script-src', false, [$loaderOrigin]);
+            // connect-src too: browsers check the loader's `//# sourceMappingURL` fetch
+            // (loader.js.map, issued whenever DevTools is open) against connect-src rather
+            // than script-src, so a script-src-only entry still logs a violation on every
+            // page view for anyone with DevTools open. The origin already serves the
+            // loader script, so allowing it to be fetched adds no new trust.
+            $policies[] = new FetchPolicy('connect-src', false, [$loaderOrigin]);
         }
 
         $ingestOrigin = $this->extractOrigin($this->pixelConfig->getIngestBaseUrl());

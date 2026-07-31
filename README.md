@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.13 --no-update
+composer require tnw/module-idealdata=1.14 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -143,6 +143,7 @@ Policy directive: "script-src …"`.
 |-----------|--------|-----|
 | `script-src` | `https://pixel.idealdata.io` | the async pixel loader script |
 | `connect-src` | `https://my.idealdata.io` | the SDK's ingest calls (`/pixel-ingest/config`, `/pixel-ingest/collect`) |
+| `connect-src` | `https://pixel.idealdata.io` | the loader's source map (`loader.js.map`) — see below (since 1.14) |
 | `img-src` | `https://my.idealdata.io` | only used if the SDK falls back to an image beacon |
 
 Two layers provide this, so both a canonical and a custom deployment work:
@@ -160,6 +161,15 @@ Two layers provide this, so both a canonical and a custom deployment work:
 
 Both layers only ever **add** sources; neither can narrow a policy the merchant
 already has. The storefront policy is affected — the admin policy is untouched.
+
+**Why the loader origin is on `connect-src` too (since 1.14).** The loader ships a
+`//# sourceMappingURL` comment, and browsers fetch `loader.js.map` whenever DevTools
+is open. That fetch is checked against **`connect-src`**, not `script-src`, so a
+`script-src`-only entry left every DevTools session logging
+`Connecting to 'https://pixel.idealdata.io/loader.js.map' violates … "connect-src …"`
+on each page view. The origin already serves the loader script, so allowing it to be
+fetched adds no new trust. Nothing about the pixel's data collection changes — the
+violation was console noise only.
 
 > **Fixed in 1.13 — upgrade from 1.11 / 1.12.** In 1.11 and 1.12 the collector was
 > registered into `Magento\Csp\Model\CompositePolicyCollector` from
@@ -192,7 +202,10 @@ in any module's `etc/csp_whitelist.xml`:
     <values><value id="idealdata_pixel_loader" type="host">https://pixel.idealdata.io</value></values>
 </policy>
 <policy id="connect-src">
-    <values><value id="idealdata_pixel_ingest" type="host">https://my.idealdata.io</value></values>
+    <values>
+        <value id="idealdata_pixel_ingest" type="host">https://my.idealdata.io</value>
+        <value id="idealdata_pixel_loader_map" type="host">https://pixel.idealdata.io</value>
+    </values>
 </policy>
 ```
 
