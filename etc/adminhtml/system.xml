@@ -57,7 +57,7 @@
                 <field id="debug" translate="label comment" type="select" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Debug Logging</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>Local troubleshooting switch (not managed by the IdealData app). When Yes, the storefront pixel logs verbose diagnostics to the browser console — including which cart capture layer (native Magento event / section-diff / public API) produced each cart event. Local console only; nothing is sent anywhere. Leave No in production.</comment>
+                    <comment>Local troubleshooting switch (not managed by the IdealData app). When Yes, the storefront pixel logs verbose diagnostics to the browser console — including which cart capture layer (native Magento event / section-diff / public API) produced each cart event. This module's own cart bridge, which is what tracks carts on Hyvä and other themes without an add-to-cart event, logs under the [idealdata] cart bridge: prefix. Local console only; nothing is sent anywhere. Leave No in production.</comment>
                 </field>
             </group>
             <group id="developer_snippets" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">

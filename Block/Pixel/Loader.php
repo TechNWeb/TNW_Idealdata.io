@@ -3,6 +3,7 @@
 namespace TNW\Idealdata\Block\Pixel;
 
 use Magento\Framework\View\Element\Template;
+use TNW\Idealdata\CustomerData\Identity;
 use TNW\Idealdata\Model\Pixel\Config;
 
 /**
@@ -104,5 +105,44 @@ class Loader extends Template
     public function isDebugEnabled()
     {
         return $this->pixelConfig->isDebugEnabled();
+    }
+
+    /**
+     * URL of the theme-agnostic cart-tracking bridge asset
+     * (view/frontend/web/js/cart-tracking.js), which reports cart.add /
+     * cart.remove by diffing Magento's `cart` customer-data section.
+     *
+     * Served from the store's own static base URL, so it needs no CSP entry of
+     * its own: any policy that already allows the theme's own JavaScript allows
+     * this file. It is a classic script — NOT a RequireJS module — because Hyvä
+     * ships no RequireJS.
+     *
+     * @return string
+     */
+    public function getCartTrackingUrl()
+    {
+        return $this->getViewFileUrl('TNW_Idealdata::js/cart-tracking.js');
+    }
+
+    /**
+     * Magento's customer-data section endpoint, handed to the bridge so it never
+     * has to guess a base URL from a theme global (Hyvä and Luma expose
+     * different ones). Used only to repair a missing identity section.
+     *
+     * @return string
+     */
+    public function getSectionLoadUrl()
+    {
+        return $this->getUrl('customer/section/load');
+    }
+
+    /**
+     * Name of the customer-data section carrying the numeric customer id.
+     *
+     * @return string
+     */
+    public function getIdentitySectionName()
+    {
+        return Identity::SECTION_NAME;
     }
 }

@@ -20,6 +20,17 @@
                 <strong>Debug Logging</strong> field above:
             </p>
             <p>
+                <strong>Hyvä and other non-Luma themes are covered.</strong> This module
+                reports cart activity by watching Magento's own <code>cart</code>
+                customer-data section, which every add-to-cart surface has to change —
+                product page, listing, mini-cart / drawer, cart page, sliders, quick-add,
+                search results and CMS widgets alike. That works without jQuery and without
+                a theme-specific add-to-cart event, so <strong>Hyvä</strong> and
+                <strong>Luma</strong> are both tracked out of the box and there is normally
+                nothing for you to bind by hand. The procedure below is how you confirm it
+                on your store.
+            </p>
+            <p>
                 <strong>Prerequisite:</strong> the pixel must be enabled first — the
                 <strong>Enable Pixel</strong> field above must be <strong>Yes</strong> (it is turned on
                 for you from the IdealData app when you enable the pixel on your Adobe Commerce
@@ -54,9 +65,11 @@
                 <li>
                     For each action, watch the console. A line showing <code>cart.add</code> /
                     <code>cart.remove</code> captured via <code>native-event</code> or
-                    <code>section-diff</code> means auto-capture works on that surface.
-                    <strong>No line for an action means that surface is NOT auto-tracked</strong> and
-                    needs a manual binding.
+                    <code>section-diff</code> means auto-capture works on that surface — either
+                    from the pixel itself, or from this module's cart bridge, which logs under the
+                    <code>[idealdata] cart bridge:</code> prefix.
+                    <strong>No line from either for an action means that surface is NOT
+                    tracked</strong> and needs a manual binding.
                 </li>
                 <li>
                     For any surface that did not fire, add the matching snippet (below) to that
@@ -65,8 +78,9 @@
                 </li>
             </ol>
             <p class="idealdata-snippet-note">
-                Auto-capture covers most standard flows out of the box — manual binding is only for the
-                gaps this procedure surfaces (custom themes, custom widgets, non-standard add-to-cart).
+                Auto-capture covers standard flows on Hyvä and Luma out of the box — manual binding is
+                only for the gaps this procedure surfaces (a custom theme that bypasses the cart
+                section, a checkout that changes the cart without a page or section update).
                 It is safe to add a binding defensively even where auto-capture already works: explicit
                 calls and automatic capture <strong>de-duplicate against each other</strong> within a
                 short window (explicit wins), so you will not double-count.
@@ -74,9 +88,10 @@
 
             <h4>Manual cart-event binding</h4>
             <p>
-                The pixel already captures cart activity <strong>automatically</strong> on
-                Adobe Commerce (native Magento events plus a customer-data section diff) —
-                you do not need to write any code to get <code>cart.add</code> /
+                Cart activity is already captured <strong>automatically</strong> on
+                Adobe Commerce — native Magento events, plus a customer-data section diff
+                that also carries Hyvä and other themes with no add-to-cart event of their
+                own — so you do not need to write any code to get <code>cart.add</code> /
                 <code>cart.remove</code> events. This section is for developers who want
                 <strong>precise, explicit</strong> instrumentation: e.g. sending the exact
                 <code>productId</code>, variant or quantity your theme knows but the cart

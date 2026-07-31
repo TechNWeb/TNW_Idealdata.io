@@ -23,8 +23,12 @@ connector: it exposes authenticated REST endpoints the connector calls, and host
   `getMockBuilder(...)->disableOriginalConstructor()`. No module-local `phpunit.xml`
   (relies on the host Magento's config).
 - **Versioning:** bump BOTH `etc/module.xml` `setup_version` and `composer.json`
-  `version` together on a shippable change (and the README install line). Current: **1.12**.
+  `version` together on a shippable change (and the README install line). Current: **1.15**.
 - Validate edits locally with `php -l` (all PHP) + a `DOMDocument` load per XML file.
+  Storefront JS: `node --check` + the module's own dependency-free suite,
+  `node Test/Js/cart-tracking.test.js` (Node `vm`; do NOT add a JS build chain).
+- `FEATURES.md` is a stale snapshot of v1.3 and documents none of the pixel work —
+  the pixel's live documentation is `README.md`.
 
 ## Storefront pixel
 
@@ -38,6 +42,16 @@ Reports logged-in-customer presence + activity to IdealData. Two on-store pieces
    cross-repo key the `idealdata3-pixel` SDK adapter reads.
 2. **Loader** — `Block/Pixel/Loader.php` + `view/frontend/templates/pixel/loader.phtml`
    inject the async loader (`before.body.end`), gated by config.
+3. **Cart tracking** (since 1.15) — `view/frontend/web/js/cart-tracking.js`, injected by
+   the same template/gate as a classic script configured via data-attributes. Reports
+   `cart.add`/`cart.remove` by DIFFING the core `cart` customer-data section, because
+   **Hyvä dispatches no add-to-cart JS event** (and ships no jQuery/RequireJS) for the
+   SDK's native-event layer to hook — it hooks `private-content-loaded` plus a
+   `mage-cache-storage` watch, with the baseline persisted in `localStorage` so
+   non-AJAX form posts are caught on the next page load. Theme-agnostic on purpose:
+   it runs on Luma too and de-duplicates against the SDK's auto-capture. The
+   suppression rules (login/logout, order-success, stale baseline, absent section,
+   multi-tab) are the safety-critical part — see the file header and README.
 
 ### Config is app-provisioned (do not ask the merchant to type it)
 

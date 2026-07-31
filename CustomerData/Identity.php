@@ -26,6 +26,15 @@ use Magento\Customer\Model\Session as CustomerSession;
 class Identity implements SectionSourceInterface
 {
     /**
+     * The customer-data section name this source is registered against. Also the
+     * localStorage['mage-cache-storage'] key the pixel SDK and the cart-tracking
+     * bridge read, and the name etc/frontend/di.xml + etc/frontend/sections.xml
+     * declare — a cross-repo contract, so the three must stay in sync (guarded by
+     * Test\Unit\CustomerData\IdentitySectionNameTest).
+     */
+    const SECTION_NAME = 'tnw-idealdata-identity';
+
+    /**
      * @var CustomerSession
      */
     private $customerSession;

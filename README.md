@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.14 --no-update
+composer require tnw/module-idealdata=1.15 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -221,6 +221,9 @@ to the **browser console** (prefixed `[idealdata-pixel]`):
 - which cart capture layer produced each `cart.add` / `cart.remove` —
   `native-event` (with the raw Magento event, e.g. `ajax:addToCart`),
   `section-diff` (with the `summary_count` before&rarr;after), or `public-api`;
+- since 1.15, the module's own cart-tracking bridge logs under the
+  `[idealdata] cart bridge:` prefix — the runtime it detected, each reported event
+  and its payload, and every suppression (baseline reset, stale-baseline removal);
 - every de-dup suppression (which key collapsed against which prior layer);
 - page-view and presence transitions, and a per-event send/drop gate trace.
 
@@ -233,6 +236,89 @@ production. Manual fallback (stores not using the admin toggle):
 ```bash
 bin/magento config:set tnw_idealdata_pixel/general/debug 1
 bin/magento cache:flush config full_page
+```
+
+### Cart tracking on any theme — Hyvä included (since 1.15)
+
+Since 1.15 the module ships its own **cart-tracking bridge**
+(`view/frontend/web/js/cart-tracking.js`), injected by the same
+`pixel/loader.phtml` and behind the same `isPixelEnabled()` gate as the loader.
+It reports `cart.add` / `cart.remove` by **diffing Magento's `cart` customer-data
+section**, and pins the customer id via `setCustomerId`.
+
+**Why it was needed.** The SDK's automatic capture has two layers: native Magento
+JS events and a customer-data section diff — both written against Luma, with the
+event layer built on jQuery. Hyvä ships **no jQuery, no RequireJS**, and
+dispatches **no add-to-cart event at all** (its cart-related events are
+`toggle-cart` and `reload-customer-section-data`; there is nothing for "an item
+was added"). On a Hyvä store the event layer therefore has nothing to hook, and
+cart activity never reaches the platform. What Hyvä *does* share with Luma is the
+private-content pipeline: the same `/customer/section/load` endpoint, the same
+`localStorage['mage-cache-storage']` key and shape, plus a
+`private-content-loaded` CustomEvent on `window` carrying the whole section map.
+Every cart mutation is a POST, which rotates the `private_content_version` cookie
+and makes Hyvä refetch sections.
+
+**Why a section diff instead of binding theme controls.** The cart section is the
+one thing every add-to-cart surface necessarily changes. Instrumenting controls
+means chasing PDP forms, listing buttons, drawer qty, cart page, product sliders,
+quick-add, Algolia results and PageBuilder widgets — per theme and per extension,
+forever. Diffing the section covers all of them by construction, including plain
+non-AJAX form posts that navigate away: the baseline is persisted, so the diff is
+computed on the next page load.
+
+It hooks all of these, so no single one is load-bearing:
+
+| Hook | Covers |
+|------|--------|
+| `private-content-loaded` on `window` | Hyvä (and anything following its pattern) — earliest signal, no storage needed |
+| `mage-cache-storage` watch (1s, paused while the tab is hidden) | Luma, custom/headless themes, any control that reloads sections without an event |
+| Read on script start / `pageshow` | non-AJAX add-to-cart that navigated to a new page |
+| `storage` event | a cart changed in another tab |
+
+Each event carries `productId` (numeric, as a string), `variantId` (the line's
+SKU), `title`, the `quantity` **delta** for that action, and `cartTotalQuantity`
+summed from the cart lines.
+
+The bridge runs on **Luma too**, deliberately: explicit `track` calls de-duplicate
+against the SDK's own auto-capture within a short window and the explicit call
+wins, so it cannot double-count. It needs **no CSP entry** — the file is served
+from the store's own static base URL, so any policy that already allows the
+theme's JavaScript allows this.
+
+**It will not invent shopper activity.** Each of these is a false-event source
+that is explicitly handled:
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Cart section absent (invalidated, not yet fetched, storage unavailable) | skipped — never read as "cart emptied" |
+| Login / logout | baseline reset silently (quote merge, cart disappearing) |
+| Order placed (`checkout/onepage/success`, multishipping) | baseline reset silently — the order emptied the cart, not the shopper |
+| Baseline older than 30 min | additions still reported, **removals suppressed** (cart expiry, an admin editing the quote, or an order placed on another device all look like a removal) |
+| Two tabs open | the baseline lives in `localStorage`, so the first tab to see a change advances it and the others stay quiet |
+| `summary_count` | only ever a fallback: it is a line **count** or a total **qty** depending on `checkout/cart_link/use_qty`, so quantities come from the per-line `qty` |
+| Item list empty while the cart is not | falls back to counting instead of reporting every line as removed |
+| localStorage unavailable (private mode) / malformed cache | degrades to the event path; never throws into the theme |
+
+**Identity repair.** The bridge also calls
+`idealdataPixel('setCustomerId', '<numericId>')` from the
+`tnw-idealdata-identity` section. If a shopper is logged in but that section is
+missing or stale, it fetches **just that section** once per page view. Luma and
+Hyvä both preload every section, so this repair normally never runs.
+
+Behaviour is covered by a dependency-free test suite (Node's own `vm`, no build
+chain added):
+
+```bash
+node Test/Js/cart-tracking.test.js
+```
+
+After upgrading, deploy static content so the new asset is published:
+
+```bash
+bin/magento setup:upgrade
+bin/magento setup:static-content:deploy -f   # add your locales, e.g. en_US
+bin/magento cache:flush
 ```
 
 ### Verify cart tracking on your theme (since 1.10)
@@ -267,8 +353,10 @@ pages at all, so there is nothing to verify and the console stays silent.
      quick-add, one-click buy.
 4. For each action, watch the console: a line showing `cart.add` / `cart.remove`
    captured via `native-event` or `section-diff` means auto-capture works there.
-   **No line for an action means that surface is NOT auto-tracked** and needs a
-   manual binding.
+   Since 1.15 the module's own bridge logs the same events under the
+   `[idealdata] cart bridge:` prefix (`… cart.add captured via section-diff`), which
+   is what covers Hyvä. **No line from either for an action means that surface is
+   NOT tracked** and needs a manual binding.
 5. For any surface that didn't fire, add the matching snippet (below) to that theme
    control's handler, and re-test with debug on until every cart surface logs an event.
 
