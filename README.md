@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.12 --no-update
+composer require tnw/module-idealdata=1.13 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -155,11 +155,28 @@ Two layers provide this, so both a canonical and a custom deployment work:
    request time and adds them to the storefront policy. A store the IdealData app
    provisioned with a non-canonical URL (staging, a per-tenant CDN hostname) is
    therefore whitelisted automatically, with no module release and no merchant
-   action. It adds nothing at all while the pixel is disabled, and ignores a
-   malformed URL rather than widening the policy.
+   action. It adds nothing at all while the pixel is disabled, outside the
+   storefront area, or for a malformed URL.
 
 Both layers only ever **add** sources; neither can narrow a policy the merchant
 already has. The storefront policy is affected — the admin policy is untouched.
+
+> **Fixed in 1.13 — upgrade from 1.11 / 1.12.** In 1.11 and 1.12 the collector was
+> registered into `Magento\Csp\Model\CompositePolicyCollector` from
+> `etc/frontend/di.xml`. Magento merges object-manager arguments across scopes by
+> argument **name**, not by array item, so that area-scoped declaration *replaced*
+> core's whole `collectors` array rather than adding to it. On a store running CSP
+> in restrict mode the storefront policy collapsed to only the three IdealData
+> origins — no `'self'`, no `'unsafe-inline'`, no `data:`, no `csp_whitelist.xml`
+> hosts and no per-request nonce — so the browser blocked essentially every store
+> script, image and XHR. 1.13 moves the registration to the module's global
+> `etc/di.xml` (where item names merge correctly) and gates the collector to the
+> storefront area in PHP.
+>
+> On 1.11/1.12 the immediate workaround, without a deploy, is
+> `bin/magento config:set tnw_idealdata_pixel/general/enabled 0 && bin/magento cache:flush`
+> — that empties the collapsed policy so no header is emitted, at the cost of the
+> pixel and of the store's CSP.
 
 The inline `window.idealdataSettings` snippet and the loader `<script>` tag are
 rendered through Magento's `SecureHtmlRenderer`, so both carry the request's CSP

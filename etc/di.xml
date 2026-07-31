@@ -23,6 +23,39 @@
         <plugin name="tnw_idealdata_record_source_cart" type="TNW\Idealdata\Plugin\AdminOrder\RecordSourceCartPlugin" sortOrder="10"/>
     </type>
 
+    <!--
+        Adds the CONFIGURED pixel origins to the storefront CSP header, so a store
+        provisioned with a non-canonical loader/ingest URL (staging, a legacy CDN
+        hostname) is whitelisted without a module release. The canonical origins
+        ship statically in etc/csp_whitelist.xml.
+
+        MUST stay in this GLOBAL di.xml, next to where Magento_Csp declares the
+        argument. Magento merges object-manager arguments across scopes with
+        array_replace() keyed by ARGUMENT NAME (Magento\Framework\ObjectManager\
+        Config\Config::_mergeConfiguration), not by array item: declaring
+        `collectors` from etc/frontend/di.xml REPLACES core's whole array, leaving
+        PixelPolicyCollector as the storefront's ONLY collector. That drops the
+        config collector ('self'/'unsafe-inline'/data: defaults), the
+        csp_whitelist.xml collector (every merchant host — and this module's own
+        whitelist) and the dynamic collector (the per-request nonce), collapsing
+        the storefront policy to the three IdealData origins and blocking every
+        store script, image and XHR. Item names merge only WITHIN one scope, which
+        is what this global declaration relies on.
+
+        Core wires config=1, whitelist=2, dynamic=3, controller=100; sortOrder 15
+        places this after the merchant's own csp_whitelist.xml and before
+        controller-level overrides. \Proxy matches how core wires its collectors
+        (the header is not built on every request). Global scope means every area
+        instantiates it, so the collector itself is gated to the frontend area.
+    -->
+    <type name="Magento\Csp\Model\CompositePolicyCollector">
+        <arguments>
+            <argument name="collectors" xsi:type="array">
+                <item name="tnw_idealdata_pixel" xsi:type="object" sortOrder="15">TNW\Idealdata\Model\Csp\PixelPolicyCollector\Proxy</item>
+            </argument>
+        </arguments>
+    </type>
+
     <!-- Preferences -->
     <preference for="TNW\Idealdata\Api\OrderStatusRepositoryInterface" type="TNW\Idealdata\Model\OrderStatusRepository"/>
 

@@ -6,6 +6,8 @@ namespace TNW\Idealdata\Test\Unit\Model\Csp;
 
 use Magento\Csp\Api\Data\PolicyInterface;
 use Magento\Csp\Model\Policy\FetchPolicy;
+use Magento\Framework\App\Area;
+use Magento\Framework\App\State;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use TNW\Idealdata\Model\Csp\PixelPolicyCollector;
@@ -19,6 +21,11 @@ class PixelPolicyCollectorTest extends TestCase
     private $pixelConfig;
 
     /**
+     * @var State|MockObject
+     */
+    private $appState;
+
+    /**
      * @var PixelPolicyCollector
      */
     private $collector;
@@ -28,8 +35,12 @@ class PixelPolicyCollectorTest extends TestCase
         $this->pixelConfig = $this->getMockBuilder(Config::class)
             ->disableOriginalConstructor()
             ->getMock();
+        $this->appState = $this->getMockBuilder(State::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $this->appState->method('getAreaCode')->willReturn(Area::AREA_FRONTEND);
 
-        $this->collector = new PixelPolicyCollector($this->pixelConfig);
+        $this->collector = new PixelPolicyCollector($this->pixelConfig, $this->appState);
     }
 
     public function testAddsLoaderAndIngestOriginsWhenEnabled(): void
@@ -62,6 +73,52 @@ class PixelPolicyCollectorTest extends TestCase
         $defaults = [$this->policy('script-src')];
 
         $this->assertSame($defaults, $this->collector->collect($defaults));
+    }
+
+    /**
+     * The collector is registered in the GLOBAL di.xml (registering it per-area
+     * replaces core's whole collectors array), so every area instantiates it. Only
+     * the storefront policy may be widened.
+     *
+     * @dataProvider nonFrontendAreaProvider
+     */
+    public function testAddsNothingOutsideTheFrontendArea(string $areaCode): void
+    {
+        $appState = $this->getMockBuilder(State::class)->disableOriginalConstructor()->getMock();
+        $appState->method('getAreaCode')->willReturn($areaCode);
+        $this->pixelConfig->expects($this->never())->method('isPixelEnabled');
+
+        $collector = new PixelPolicyCollector($this->pixelConfig, $appState);
+        $defaults = [$this->policy('script-src')];
+
+        $this->assertSame($defaults, $collector->collect($defaults));
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public function nonFrontendAreaProvider(): array
+    {
+        return [
+            'admin' => [Area::AREA_ADMINHTML],
+            'webapi rest' => [Area::AREA_WEBAPI_REST],
+            'crontab' => [Area::AREA_CRONTAB],
+        ];
+    }
+
+    /**
+     * An unset area must not escape as an exception — a throwing policy collector
+     * would take down the response, not just the pixel.
+     */
+    public function testAddsNothingWhenTheAreaIsNotSet(): void
+    {
+        $appState = $this->getMockBuilder(State::class)->disableOriginalConstructor()->getMock();
+        $appState->method('getAreaCode')->willThrowException(new \LogicException('Area code is not set'));
+
+        $collector = new PixelPolicyCollector($this->pixelConfig, $appState);
+        $defaults = [$this->policy('img-src')];
+
+        $this->assertSame($defaults, $collector->collect($defaults));
     }
 
     public function testPreservesDefaultPolicies(): void
