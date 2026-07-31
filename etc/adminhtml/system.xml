@@ -21,7 +21,7 @@
             <resource>TNW_Idealdata::config</resource>
             <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Storefront Pixel</label>
-                <comment><![CDATA[Injects the IdealData storefront pixel so logged-in customers report "online now" presence. <strong>These values are managed automatically by the IdealData app</strong> — enable the pixel on your Adobe Commerce connection there and the token + URLs below are delivered to this store for you. The fields are read-only; you do not need to edit them.]]></comment>
+                <comment><![CDATA[Injects the IdealData storefront pixel so logged-in customers report "online now" presence and cart activity. Works on <strong>Hyvä and Luma</strong> themes out of the box — no theme changes and no code to write. <strong>These values are managed automatically by the IdealData app</strong> — enable the pixel on your Adobe Commerce connection there and the token + URLs below are delivered to this store for you. The fields are read-only; you do not need to edit them.]]></comment>
                 <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Enable Pixel</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -57,7 +57,7 @@
                 <field id="debug" translate="label comment" type="select" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Debug Logging</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>Local troubleshooting switch (not managed by the IdealData app). When Yes, the storefront pixel logs verbose diagnostics to the browser console — including which cart capture layer (native Magento event / section-diff / public API) produced each cart event. Local console only; nothing is sent anywhere. Leave No in production.</comment>
+                    <comment>Local troubleshooting switch (not managed by the IdealData app). When Yes, the storefront pixel logs verbose diagnostics to the browser console — including which cart capture layer (native Magento event / section-diff / public API) produced each cart event. This module's own cart bridge, which is what tracks carts on Hyvä and other themes without an add-to-cart event, logs under the [idealdata] cart bridge: prefix. Local console only; nothing is sent anywhere. Leave No in production.</comment>
                 </field>
             </group>
             <group id="developer_snippets" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">

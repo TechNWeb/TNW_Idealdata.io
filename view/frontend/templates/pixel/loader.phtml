@@ -9,7 +9,15 @@
  * so NO inline-PHP customer id is emitted here — that path is broken under Full
  * Page Cache. Renders nothing unless the pixel is enabled + fully configured.
  *
- * Both tags go through $secureRenderer so Magento_Csp stamps the request nonce
+ * A third tag loads the cart-tracking bridge (web/js/cart-tracking.js), which
+ * reports cart.add / cart.remove by diffing the `cart` customer-data section.
+ * That is what makes cart capture work on Hyvä, which dispatches no add-to-cart
+ * JavaScript event for the SDK's native-event layer to hook (and ships neither
+ * jQuery nor RequireJS) — see the header of cart-tracking.js. It is a plain
+ * classic script for the same reason, and it is configured through
+ * data-attributes so the file stays static, cacheable and inline-JS-free.
+ *
+ * All three tags go through $secureRenderer so Magento_Csp stamps the request nonce
  * on them. This is NOT cosmetic: under CSP the presence of a nonce source in
  * `script-src` makes browsers IGNORE 'unsafe-inline', so a hand-written inline
  * <script> stops executing the moment a store switches to nonce-based CSP —
@@ -43,6 +51,18 @@ JS;
 <?= /* @noEscape */ $secureRenderer->renderTag(
     'script',
     ['async' => 'async', 'src' => $block->getLoaderUrl()],
+    '',
+    false
+) ?>
+<?= /* @noEscape */ $secureRenderer->renderTag(
+    'script',
+    [
+        'async' => 'async',
+        'src' => $block->getCartTrackingUrl(),
+        'data-idealdata-cart-tracking' => '1',
+        'data-section-load-url' => $block->getSectionLoadUrl(),
+        'data-identity-section' => $block->getIdentitySectionName(),
+    ],
     '',
     false
 ) ?>

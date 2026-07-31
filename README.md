@@ -3,15 +3,16 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.14 --no-update
+composer require tnw/module-idealdata=1.15 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
 
-## Storefront Pixel (customer presence)
+## Storefront Pixel (customer presence + cart activity)
 
 Since 1.5 the module can inject the **IdealData storefront pixel**, which reports
-logged-in-customer presence ("online now") to IdealData. It does two things:
+logged-in-customer presence ("online now") and cart activity to IdealData. It does
+three things:
 
 1. **Exposes the logged-in customer id to storefront JavaScript** via a dedicated
    customer-data section (`tnw-idealdata-identity`). Because this loads through
@@ -19,6 +20,9 @@ logged-in-customer presence ("online now") to IdealData. It does two things:
    is depersonalization-safe — unlike inline PHP, which FPC strips on cacheable
    pages.
 2. **Injects the async pixel loader** on every storefront page (gated by config).
+3. **Reports `cart.add` / `cart.remove`** from a theme-agnostic cart-tracking bridge
+   (since 1.15), which is what makes cart capture work on **Hyvä** as well as Luma —
+   see "Cart tracking on any theme" below.
 
 ### Enabling (app-provisioned — since 1.6)
 
@@ -221,6 +225,9 @@ to the **browser console** (prefixed `[idealdata-pixel]`):
 - which cart capture layer produced each `cart.add` / `cart.remove` —
   `native-event` (with the raw Magento event, e.g. `ajax:addToCart`),
   `section-diff` (with the `summary_count` before&rarr;after), or `public-api`;
+- since 1.15, the module's own cart-tracking bridge logs under the
+  `[idealdata] cart bridge:` prefix — the runtime it detected, each reported event
+  and its payload, and every suppression (baseline reset, stale-baseline removal);
 - every de-dup suppression (which key collapsed against which prior layer);
 - page-view and presence transitions, and a per-event send/drop gate trace.
 
@@ -233,6 +240,128 @@ production. Manual fallback (stores not using the admin toggle):
 ```bash
 bin/magento config:set tnw_idealdata_pixel/general/debug 1
 bin/magento cache:flush config full_page
+```
+
+### Cart tracking on any theme — Hyvä included (since 1.15)
+
+Since 1.15 the module ships its own **cart-tracking bridge**
+(`view/frontend/web/js/cart-tracking.js`), injected by the same
+`pixel/loader.phtml` and behind the same `isPixelEnabled()` gate as the loader.
+It reports `cart.add` / `cart.remove` by **diffing Magento's `cart` customer-data
+section**, and pins the customer id via `setCustomerId`.
+
+**Why it was needed.** The SDK's automatic capture has two layers: native Magento
+JS events and a customer-data section diff — both written against Luma, with the
+event layer built on jQuery. Hyvä ships **no jQuery, no RequireJS**, and
+dispatches **no add-to-cart event at all** (its cart-related events are
+`toggle-cart` and `reload-customer-section-data`; there is nothing for "an item
+was added"). On a Hyvä store the event layer therefore has nothing to hook, and
+cart activity never reaches the platform. What Hyvä *does* share with Luma is the
+private-content pipeline: the same `/customer/section/load` endpoint, the same
+`localStorage['mage-cache-storage']` key and shape, plus a
+`private-content-loaded` CustomEvent on `window` carrying the whole section map.
+Every cart mutation is a POST, which rotates the `private_content_version` cookie
+and makes Hyvä refetch sections.
+
+**Why a section diff instead of binding theme controls.** The cart section is the
+one thing every add-to-cart surface necessarily changes. Instrumenting controls
+means chasing PDP forms, listing buttons, drawer qty, cart page, product sliders,
+quick-add, Algolia results and PageBuilder widgets — per theme and per extension,
+forever. Diffing the section covers all of them by construction, including plain
+non-AJAX form posts that navigate away: the baseline is persisted, so the diff is
+computed on the next page load.
+
+It hooks all of these, so no single one is load-bearing:
+
+| Hook | Covers |
+|------|--------|
+| `private-content-loaded` on `window` | Hyvä (and anything following its pattern) — earliest signal, no storage needed |
+| `mage-cache-storage` watch (1s, paused while the tab is hidden) | Luma, custom/headless themes, any control that reloads sections without an event |
+| Read on script start / `pageshow` | non-AJAX add-to-cart that navigated to a new page |
+| `storage` event | a cart changed in another tab |
+
+Each event carries `productId` (numeric, as a string), `variantId` (the line's
+SKU), `title`, the `quantity` **delta** for that action, and `cartTotalQuantity`
+summed from the cart lines.
+
+It needs **no CSP entry** — the file is served from the store's own static base
+URL, so any policy that already allows the theme's JavaScript allows this.
+
+**Who owns an event (why this cannot double-count).** The SDK's cross-layer
+de-duplication is **one-directional**: an explicit `track()` call suppresses the
+auto-capture diff that *follows* it, but an explicit call arriving *after* an
+auto-capture emit is not suppressed — and `cartAutoCapture` is delivered per store
+from ingest, so the module cannot switch the SDK's capture off. Ownership is
+therefore split on the one thing observable from the storefront:
+`window.idealdataPixelCore`, the SDK core bundle's global, which exists only once
+its collectors are running. **The bridge reports only while that global is
+absent.** That is sufficient because the SDK can only report a change it observes
+*after* its core starts — it seeds its cart baseline from the section cache at
+that moment:
+
+- Hyvä's lost add (form POST → navigation → the section refetch that follows the
+  page load) is normally observed by the bridge before the SDK's core is up. The
+  SDK's baseline seed then already contains it, so the SDK never reports it and
+  the bridge's report is the only one. **This is the gap the bridge exists for.**
+- If the SDK's core came up first, it diffs that same refetch itself and reports
+  it — and the bridge stays silent.
+- A live in-page change (mini-cart qty, drawer remove, Luma's click-time
+  add-to-cart) always happens with the core up, so it is always the SDK's.
+
+So Luma behaves exactly as it does today, Hyvä's missing adds start arriving, and
+neither side reports the same action twice.
+
+> **Root cause, for the record.** The SDK's cart collector keeps its baseline
+> **in memory for one page load** (`prevSummaryCount`, seeded at `start()`, with
+> the first section reload suppressed so a page load cannot emit a phantom event).
+> On Luma that is fine — adds are in-page AJAX, so they happen with the collector
+> already bound. On Hyvä the PDP/listing add is a form POST that **navigates**, so
+> the only trace is a section refetch right after the next page load — which the
+> async SDK usually has not loaded in time to see, and which its first-snapshot
+> guard would swallow anyway. Persisting that baseline across page loads in the
+> SDK (`idealdata3-pixel`) would fix Hyvä for every Adobe Commerce store without a
+> module release; this bridge is the module-side fix and is scoped so the two
+> cannot collide.
+>
+> ⚠️ **Coupling to watch:** the split assumes the SDK's auto-capture is **on**
+> (ingest does not emit `cartAutoCapture` today, so the `true` default applies). If
+> IdealData ever sets `cartAutoCapture:false` for an Adobe Commerce store, this
+> bridge has to be told too — otherwise live in-page cart changes would be
+> reported by nobody.
+
+**It will not invent shopper activity.** Each of these is a false-event source
+that is explicitly handled:
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Cart section absent (invalidated, not yet fetched, storage unavailable) | skipped — never read as "cart emptied" |
+| Login / logout | baseline reset silently (quote merge, cart disappearing) |
+| Order placed (`checkout/onepage/success`, multishipping) | baseline reset silently — the order emptied the cart, not the shopper |
+| Baseline older than 30 min | additions still reported, **removals suppressed** (cart expiry, an admin editing the quote, or an order placed on another device all look like a removal) |
+| Two tabs open | the baseline lives in `localStorage`, so the first tab to see a change advances it and the others stay quiet |
+| `summary_count` | only ever a fallback: it is a line **count** or a total **qty** depending on `checkout/cart_link/use_qty`, so quantities come from the per-line `qty` |
+| Item list empty while the cart is not | falls back to counting instead of reporting every line as removed |
+| localStorage unavailable (private mode) / malformed cache | degrades to the event path; never throws into the theme |
+
+**Identity repair.** The bridge also calls
+`idealdataPixel('setCustomerId', '<numericId>')` from the
+`tnw-idealdata-identity` section. If a shopper is logged in but that section is
+missing or stale, it fetches **just that section** once per page view. Luma and
+Hyvä both preload every section, so this repair normally never runs.
+
+Behaviour is covered by a dependency-free test suite (Node's own `vm`, no build
+chain added):
+
+```bash
+node Test/Js/cart-tracking.test.js
+```
+
+After upgrading, deploy static content so the new asset is published:
+
+```bash
+bin/magento setup:upgrade
+bin/magento setup:static-content:deploy -f   # add your locales, e.g. en_US
+bin/magento cache:flush
 ```
 
 ### Verify cart tracking on your theme (since 1.10)
@@ -267,19 +396,24 @@ pages at all, so there is nothing to verify and the console stays silent.
      quick-add, one-click buy.
 4. For each action, watch the console: a line showing `cart.add` / `cart.remove`
    captured via `native-event` or `section-diff` means auto-capture works there.
-   **No line for an action means that surface is NOT auto-tracked** and needs a
-   manual binding.
+   Since 1.15 the module's own bridge logs the same events under the
+   `[idealdata] cart bridge:` prefix (`… cart.add captured via section-diff`), which
+   is what covers Hyvä. **No line from either for an action means that surface is
+   NOT tracked** and needs a manual binding.
 5. For any surface that didn't fire, add the matching snippet (below) to that theme
    control's handler, and re-test with debug on until every cart surface logs an event.
 
-Auto-capture covers most standard flows out of the box; manual binding is only for
-the gaps this procedure surfaces (custom themes, custom widgets, non-standard
-add-to-cart). Adding a binding defensively where auto-capture already works is safe —
-explicit calls and auto-capture **de-dupe against each other** within a short window
-(explicit wins), so you won't double-count. (Concretely: a PDP/listing add usually
-fires the native Magento event, a mini-cart qty change is often caught only by the
-section-diff safety net, and a custom widget might fire neither — hence exercising
-**all** surfaces, not just the catalog.)
+Auto-capture covers standard flows on Hyvä and Luma out of the box; manual binding is
+only for the gaps this procedure surfaces (a custom theme that bypasses the cart
+section, a checkout that changes the cart without a page or section update).
+**Bind only the surfaces that logged nothing.** De-dup is **one-directional**: an
+explicit call suppresses auto-capture that happens *after* it (same action + same
+`productId`, within `cartDedupWindowMs` — default 1000ms), but it cannot suppress
+capture that already fired, so a snippet on an already-tracked control is counted
+twice. (Concretely: a Luma PDP/listing add fires the native Magento event at click
+time, so instrumenting it by hand would double-count; a mini-cart qty change is often caught
+only by the section diff; a Hyvä add-to-cart that reloads the page is carried by this
+module's bridge — hence exercising **all** surfaces, not just the catalog.)
 
 ### Developer: manual cart-event binding (informational — since 1.9)
 
@@ -291,11 +425,15 @@ events to the pixel explicitly. It is **purely informational** — it displays c
 to copy and runs nothing; it is always visible in the pixel config area and gated
 behind nothing.
 
-Cart events are captured **automatically** on Adobe Commerce (native Magento
-events + a customer-data section diff), so no code is required for the common case.
+Cart events are captured **automatically** on Adobe Commerce — native Magento events
+plus a customer-data section diff, with this module's bridge covering themes that
+dispatch no add-to-cart event (Hyvä) — so no code is required for the common case.
 Manual binding via the public `idealdataPixel('track', 'cart.add' | 'cart.remove',
 {...})` API is for precise, theme-known context or coverage the auto-capture does
-not reach; explicit calls de-dupe against auto-capture (explicit wins). The panel
+not reach. It must be called **at the moment of the cart change** and only on
+surfaces that are not already tracked: an explicit call suppresses the auto-capture
+that *follows* it, never capture that already fired (see the ownership section
+above). The panel
 also shows the manual-identity snippet
 (`idealdataPixel('setCustomerId', '<numericId>')`) for custom themes. Full API
 reference: the `idealdata3-pixel` repo README ("Public API").
