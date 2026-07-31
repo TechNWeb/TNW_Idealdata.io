@@ -53,14 +53,32 @@ class PixelPolicyCollectorTest extends TestCase
             ['https://pixel.idealdata.io'],
             $this->hostSourcesFor($policies, 'script-src')
         );
+        // connect-src carries BOTH origins: the ingest calls, and the loader origin
+        // itself — a `//# sourceMappingURL` fetch (loader.js.map) is checked against
+        // connect-src rather than script-src.
         $this->assertSame(
-            ['https://my.idealdata.io'],
+            ['https://pixel.idealdata.io', 'https://my.idealdata.io'],
             $this->hostSourcesFor($policies, 'connect-src')
         );
         // img-src is defensive: only used if the SDK falls back to an image beacon.
         $this->assertSame(
             ['https://my.idealdata.io'],
             $this->hostSourcesFor($policies, 'img-src')
+        );
+    }
+
+    /**
+     * A re-provisioned (non-canonical) loader host must reach connect-src too, or the
+     * loader's source-map fetch is blocked on every storefront page view with DevTools
+     * open — the static etc/csp_whitelist.xml only covers the canonical origin.
+     */
+    public function testWhitelistsANonCanonicalLoaderOriginForSourceMapFetches(): void
+    {
+        $this->configure(true, 'https://cdn.example-staging.net/idealdata/loader.js', '');
+
+        $this->assertSame(
+            ['https://cdn.example-staging.net'],
+            $this->hostSourcesFor($this->collector->collect(), 'connect-src')
         );
     }
 
@@ -129,7 +147,8 @@ class PixelPolicyCollectorTest extends TestCase
         $policies = $this->collector->collect([$default]);
 
         $this->assertSame($default, $policies[0]);
-        $this->assertCount(4, $policies);
+        // default + loader script-src/connect-src + ingest connect-src/img-src
+        $this->assertCount(5, $policies);
     }
 
     /**
@@ -159,7 +178,9 @@ class PixelPolicyCollectorTest extends TestCase
 
         $policies = $this->collector->collect();
 
-        $this->assertSame([], $this->hostSourcesFor($policies, 'connect-src'));
+        // Only the loader origin survives on connect-src: the source-map fetch stays
+        // covered even when the ingest base URL is unusable.
+        $this->assertSame(['https://pixel.idealdata.io'], $this->hostSourcesFor($policies, 'connect-src'));
         $this->assertSame([], $this->hostSourcesFor($policies, 'img-src'));
         $this->assertSame(['https://pixel.idealdata.io'], $this->hostSourcesFor($policies, 'script-src'));
     }
@@ -191,7 +212,10 @@ class PixelPolicyCollectorTest extends TestCase
         $policies = $this->collector->collect();
 
         $this->assertSame(['https://pixel.idealdata.io:8443'], $this->hostSourcesFor($policies, 'script-src'));
-        $this->assertSame(['http://ingest.local:8080'], $this->hostSourcesFor($policies, 'connect-src'));
+        $this->assertSame(
+            ['https://pixel.idealdata.io:8443', 'http://ingest.local:8080'],
+            $this->hostSourcesFor($policies, 'connect-src')
+        );
     }
 
     public function testNormalisesSchemeCase(): void

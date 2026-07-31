@@ -26,10 +26,17 @@
                 <value id="tnw_idealdata_pixel_loader" type="host">https://pixel.idealdata.io</value>
             </values>
         </policy>
-        <!-- The SDK's ingest calls (/pixel-ingest/config, /pixel-ingest/collect). -->
+        <!--
+            The SDK's ingest calls (/pixel-ingest/config, /pixel-ingest/collect), plus the
+            loader ORIGIN: browsers check a `//# sourceMappingURL` fetch (loader.js.map,
+            issued whenever DevTools is open) against connect-src, not script-src, so a
+            script-src-only whitelist still logs a CSP violation on every page view with
+            DevTools open. Costs nothing — the origin already serves the loader script.
+        -->
         <policy id="connect-src">
             <values>
                 <value id="tnw_idealdata_pixel_ingest" type="host">https://my.idealdata.io</value>
+                <value id="tnw_idealdata_pixel_loader_map" type="host">https://pixel.idealdata.io</value>
             </values>
         </policy>
         <!-- Only used if the SDK ever falls back to an image beacon for /collect. -->
