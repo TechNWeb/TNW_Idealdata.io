@@ -45,33 +45,47 @@
  * explicit call that arrives AFTER an auto-capture emit is not suppressed. So
  * reporting a change the SDK also reports would double-count it, and the SDK's
  * `cartAutoCapture` switch is delivered per store from ingest — the module
- * cannot turn it off. Ownership is therefore split on the one thing that is
- * observable from here, `window.idealdataPixelCore` (the core bundle's global,
- * present only once the SDK's collectors are running):
+ * cannot turn it off. Ownership is therefore split, on TWO conditions that both
+ * have to hold before we stay silent:
  *
- * we report a change only while that global is ABSENT; once it is there, the SDK
- * owns live cart changes and we merely advance our baseline.
+ *  1. `window.idealdataPixelCore` (the core bundle's global) is present, so the
+ *     SDK's collectors exist at all; AND
+ *  2. the runtime is one those collectors can actually observe — i.e. NOT Hyvä.
  *
- * That single rule is enough, because the SDK can only ever report a change it
- * observes AFTER its core starts — it seeds its cart baseline from the section
- * cache at that moment. So:
+ * Condition 2 was originally assumed away, and that assumption was wrong. The
+ * first version of this bridge deferred on core-presence alone, reasoning that
+ * Hyvä's lost add would normally be observed here BEFORE the core came up. On a
+ * real store the race goes the other way every time: the core is already loaded
+ * by the time the post-navigation section refetch lands, so we handed the change
+ * to a collector that cannot see it and NOBODY reported it.
  *
- *  - Hyvä's lost add (form POST → navigation → the section refetch that follows
- *    the page load) is normally observed by us before the SDK's core is up: the
- *    SDK's seed then already contains it and it never reports it, so our report
- *    is the only one. This is the gap the whole bridge exists for.
- *  - If instead the SDK's core came up first, it diffs that same refetch itself
- *    and reports it — and we stay silent, because the global is present.
- *  - A live in-page change (mini-cart qty, drawer remove, Luma's click-time
- *    add-to-cart) always happens with the core up, so it is always the SDK's.
+ * Measured on Metal Mafia (Hyvä, AC 2.4.6-p15), with the pixel enabled and the
+ * core up: an add-to-cart from the PDP and a quantity change on /checkout/cart
+ * both produced `page.viewed` + `presence.heartbeat` on the wire and NO cart
+ * event from either side. That is the failure this rule now prevents.
  *
- * Net effect: the shopper action Hyvä loses today is reported exactly once,
- * Luma keeps behaving exactly as it does now, and neither side double-counts.
+ * Why the SDK cannot see Hyvä: its native-event layer is jQuery-based and Hyvä
+ * ships no jQuery, and its section-diff layer keeps the cart baseline in memory
+ * per page load, so an add that NAVIGATES is already in the section cache by the
+ * time that baseline seeds. Neither layer has anything to fire on.
  *
- * ⚠️ COUPLING: this assumes the SDK's auto-capture is enabled (it is — ingest
- * does not emit `cartAutoCapture` today, so the default `true` applies). If
- * IdealData ever sets `cartAutoCapture:false` for an Adobe Commerce store, this
- * bridge must be told as well, or live cart changes will be reported by nobody.
+ * So the rule is now:
+ *
+ *  - On Hyvä we ALWAYS own cart events. The SDK reports none there, so there is
+ *    nothing to double-count against, and one reporter is better than none.
+ *  - Everywhere else, unchanged: we report only while the core global is ABSENT;
+ *    once it is there the SDK owns live changes and we merely advance our
+ *    baseline. Luma behaves exactly as it did before.
+ *
+ * ⚠️ COUPLING — this is the rule to revisit, from EITHER side:
+ *  - It assumes the SDK's auto-capture is enabled (it is — ingest does not emit
+ *    `cartAutoCapture` today, so the default `true` applies). If IdealData ever
+ *    sets `cartAutoCapture:false` for an Adobe Commerce store, this bridge must
+ *    be told as well, or live cart changes will be reported by nobody.
+ *  - If `idealdata3-pixel` ever gains cart capture that works on Hyvä — most
+ *    likely by persisting its collector baseline across page loads, which is the
+ *    real root-cause fix — then the Hyvä branch below starts double-counting and
+ *    MUST be removed in the same release. Do not ship one without the other.
  *
  * SAFETY RULES (each one is a false-event source we have to not fire on)
  * ---------------------------------------------------------------------
@@ -120,10 +134,17 @@
 
     /**
      * The SDK core bundle's global. Its presence means the SDK's own cart
-     * collectors are running and own live cart changes (see the ownership rule
-     * in the header).
+     * collectors are running (see the ownership rule in the header) — necessary
+     * for them to own a change, but not sufficient.
      */
     var CORE_GLOBAL = 'idealdataPixelCore';
+
+    /**
+     * Hyvä's runtime global. On Hyvä the SDK's cart collectors observe nothing
+     * (no jQuery for the event layer; a per-page in-memory baseline that a
+     * navigating add has already outrun), so cart events there are always ours.
+     */
+    var HYVA_GLOBAL = 'hyva';
 
     var POLL_MS = 1000;
     var STALE_MS = 30 * 60 * 1000;
@@ -487,11 +508,16 @@
     }
 
     /**
-     * True once the SDK's core bundle is loaded, i.e. its own cart collectors are
-     * live. See the ownership rule in the header.
+     * True when handing a live cart change to the SDK means it actually gets
+     * reported: its core bundle is loaded AND the runtime is one its collectors
+     * can observe. Hyvä is not — see the ownership rule in the header, including
+     * what has to change here if the SDK ever gains Hyvä cart capture.
      */
     function sdkOwnsLiveCartEvents() {
         try {
+            if (window[HYVA_GLOBAL]) {
+                return false;
+            }
             return !!window[CORE_GLOBAL];
         } catch (e) {
             return false;
@@ -613,9 +639,13 @@
             }
         }), POLL_MS);
 
+        // Says who will report a cart change, not just what is loaded: the
+        // verification procedure in admin sends merchants here first, and "core
+        // up" alone told them nothing about whether an event would be sent.
         log(
-            'active (' + (window.hyva ? 'hyva' : (window.jQuery ? 'luma' : 'unknown')) + ' runtime, '
-            + (sdkOwnsLiveCartEvents() ? 'SDK core already up' : 'SDK core not up yet') + ')'
+            'active (' + (window[HYVA_GLOBAL] ? 'hyva' : (window.jQuery ? 'luma' : 'unknown')) + ' runtime, '
+            + (window[CORE_GLOBAL] ? 'SDK core already up' : 'SDK core not up yet') + ', '
+            + (sdkOwnsLiveCartEvents() ? 'SDK owns live cart events' : 'this bridge owns cart events') + ')'
         );
 
         // Read straight away: after a non-AJAX add-to-cart the shopper is already

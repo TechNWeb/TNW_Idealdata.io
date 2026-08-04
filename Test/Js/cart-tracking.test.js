@@ -32,6 +32,7 @@ const STALE_MS = 30 * 60 * 1000;
 function boot(options) {
     const settings = Object.assign({ debug: false }, (options || {}).settings);
     const withSdkCore = (options || {}).withSdkCore === true;
+    const withHyva = (options || {}).withHyva === true;
     const pathname = (options || {}).pathname || '/';
     const withPixel = (options || {}).withPixel !== false;
 
@@ -89,6 +90,13 @@ function boot(options) {
 
     if (withSdkCore) {
         windowStub.idealdataPixelCore = { initCore() {} };
+    }
+
+    // Hyvä's runtime global. Its presence flips cart-event ownership to this
+    // bridge whatever the SDK core is doing, because the SDK's collectors report
+    // nothing on Hyvä.
+    if (withHyva) {
+        windowStub.hyva = {};
     }
 
     const documentStub = {
@@ -571,6 +579,40 @@ const tests = {
         // Once the core is up, live changes are the SDK's again.
         harness.attachSdkCore();
         harness.setSections({ cart: cart([line(1, 100, 3)]) });
+        harness.poll();
+
+        assert.strictEqual(trackCalls(harness).length, 1);
+    },
+
+    'on Hyvä a change IS reported even with the SDK core up (the Metal Mafia gap)'() {
+        const harness = boot({ withHyva: true, withSdkCore: true });
+        harness.setSections({ cart: cart([]) });
+        harness.poll();
+
+        // Hyvä's post-navigation section refetch, arriving after the core loaded
+        // — which is what happens on a real store every time. Deferring here is
+        // what dropped every cart event on Metal Mafia: the SDK's collectors
+        // cannot see Hyvä, so nobody reported it.
+        harness.setSections({ cart: cart([line(1, 100, 1)]) });
+        harness.poll();
+
+        assert.deepStrictEqual(trackCalls(harness), [
+            ['track', 'cart.add', {
+                productId: '100',
+                variantId: 'SKU-100',
+                title: 'Product 100',
+                quantity: 1,
+                cartTotalQuantity: 1
+            }]
+        ]);
+    },
+
+    'on Hyvä the baseline still advances, so a change is reported once'() {
+        const harness = boot({ withHyva: true, withSdkCore: true });
+        harness.setSections({ cart: cart([]) });
+        harness.poll();
+        harness.setSections({ cart: cart([line(1, 100, 1)]) });
+        harness.poll();
         harness.poll();
 
         assert.strictEqual(trackCalls(harness).length, 1);

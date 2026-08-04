@@ -3,7 +3,7 @@ Magento API module, extends native Adobecommerce(Magento) API and provides addit
 
 To install/upgrade this module run the following commands in your Adobecommerce folder:
 ```
-composer require tnw/module-idealdata=1.15 --no-update
+composer require tnw/module-idealdata=1.16 --no-update
 composer upgrade tnw/module-idealdata
 ./bin/magento setup:upgrade; ./bin/magento setup:di:compile
 ```
@@ -292,24 +292,30 @@ de-duplication is **one-directional**: an explicit `track()` call suppresses the
 auto-capture diff that *follows* it, but an explicit call arriving *after* an
 auto-capture emit is not suppressed — and `cartAutoCapture` is delivered per store
 from ingest, so the module cannot switch the SDK's capture off. Ownership is
-therefore split on the one thing observable from the storefront:
-`window.idealdataPixelCore`, the SDK core bundle's global, which exists only once
-its collectors are running. **The bridge reports only while that global is
-absent.** That is sufficient because the SDK can only report a change it observes
-*after* its core starts — it seeds its cart baseline from the section cache at
-that moment:
+therefore split on **two** conditions, both of which must hold before the bridge
+stays silent:
 
-- Hyvä's lost add (form POST → navigation → the section refetch that follows the
-  page load) is normally observed by the bridge before the SDK's core is up. The
-  SDK's baseline seed then already contains it, so the SDK never reports it and
-  the bridge's report is the only one. **This is the gap the bridge exists for.**
-- If the SDK's core came up first, it diffs that same refetch itself and reports
-  it — and the bridge stays silent.
-- A live in-page change (mini-cart qty, drawer remove, Luma's click-time
-  add-to-cart) always happens with the core up, so it is always the SDK's.
+1. `window.idealdataPixelCore` — the SDK core bundle's global, which exists only
+   once its collectors are running; **and**
+2. the runtime is one those collectors can actually observe, i.e. **not Hyvä**.
 
-So Luma behaves exactly as it does today, Hyvä's missing adds start arriving, and
-neither side reports the same action twice.
+So the rule is: **on Hyvä the bridge always owns cart events; everywhere else it
+reports only while the core global is absent.** Luma is unaffected and behaves
+exactly as it did before.
+
+> **Corrected in 1.16.** 1.15 deferred on condition 1 alone, on the reasoning that
+> Hyvä's lost add would normally be observed by the bridge *before* the SDK core
+> came up. On a real store the race goes the other way every time: the core is
+> already loaded when the post-navigation section refetch lands, so the bridge
+> handed the change to a collector that cannot see it and **nobody reported it**.
+> Measured on a live Hyvä store (AC 2.4.6-p15) with the pixel enabled and the core
+> up: a PDP add-to-cart and a `/checkout/cart` quantity change each produced
+> `page.viewed` + `presence.heartbeat` on the wire and **no cart event at all**.
+
+There is nothing to double-count against on Hyvä, because the SDK reports no cart
+events there: its event layer needs jQuery, which Hyvä does not ship, and its
+section-diff layer seeds a per-page in-memory baseline that a navigating add has
+already outrun. One reporter beats none.
 
 > **Root cause, for the record.** The SDK's cart collector keeps its baseline
 > **in memory for one page load** (`prevSummaryCount`, seeded at `start()`, with
@@ -323,11 +329,17 @@ neither side reports the same action twice.
 > module release; this bridge is the module-side fix and is scoped so the two
 > cannot collide.
 >
-> ⚠️ **Coupling to watch:** the split assumes the SDK's auto-capture is **on**
-> (ingest does not emit `cartAutoCapture` today, so the `true` default applies). If
-> IdealData ever sets `cartAutoCapture:false` for an Adobe Commerce store, this
-> bridge has to be told too — otherwise live in-page cart changes would be
-> reported by nobody.
+> ⚠️ **Coupling to watch, from either side:**
+> - The split assumes the SDK's auto-capture is **on** (ingest does not emit
+>   `cartAutoCapture` today, so the `true` default applies). If IdealData ever sets
+>   `cartAutoCapture:false` for an Adobe Commerce store, this bridge has to be told
+>   too — otherwise live in-page cart changes would be reported by nobody. Note the
+>   ownership rule keys on the core global, **not** on `cartAutoCapture`, so
+>   switching it off alone does not hand reporting back to the bridge.
+> - If `idealdata3-pixel` ever gains cart capture that works on Hyvä — most likely
+>   by persisting that collector baseline — the Hyvä branch in the bridge starts
+>   double-counting and **must be removed in the same release**. Ship the two
+>   together, never one alone.
 
 **It will not invent shopper activity.** Each of these is a false-event source
 that is explicitly handled:
@@ -402,6 +414,28 @@ pages at all, so there is nothing to verify and the console stays silent.
    NOT tracked** and needs a manual binding.
 5. For any surface that didn't fire, add the matching snippet (below) to that theme
    control's handler, and re-test with debug on until every cart surface logs an event.
+
+**If the console shows nothing at all — check the network before you conclude
+anything.** The console is only a *view* of what happened, and plenty of production
+storefronts make it a lying one: a DevTools log-level filter hides `console.log`
+while still showing errors, and it is a common production practice to replace
+`window.console` with a detached one, which silences every log while
+`console.log.toString()` still reports `[native code]`. Neither has anything to do
+with the pixel. The ground truth is the **Network** tab — tick **Preserve log**, filter
+for `collect`, and exercise the surface. A POST to `…/pixel-ingest/collect` whose
+payload contains `cart.add` / `cart.remove` means the event fired and was sent,
+whatever the console does or does not show. Two quick corroborating reads, both of
+which print via the console's *expression echo* rather than `console.log`:
+
+```js
+JSON.parse(localStorage['idealdata-pixel-cart-state']).ts   // advances when the bridge sees a cart change
+!!window.idealdataPixelCore                                  // true = SDK core loaded
+```
+
+Seeing only `page.viewed` and `presence.heartbeat` on the wire, with no cart event
+for any surface, is **not** a coverage gap and manual binding will not fix it — the
+bridge sees the change and something is stopping it being reported. Report that
+rather than instrumenting controls.
 
 Auto-capture covers standard flows on Hyvä and Luma out of the box; manual binding is
 only for the gaps this procedure surfaces (a custom theme that bypasses the cart
