@@ -78,6 +78,21 @@
                 </li>
             </ol>
             <p class="idealdata-snippet-note">
+                <strong>Seeing nothing at all in the console? Check the network before you conclude
+                anything.</strong> The console is only a view of what happened, and on a production
+                storefront it is often not a truthful one — a DevTools log-level filter can hide
+                <code>console.log</code> while still showing errors, and many sites deliberately
+                replace <code>window.console</code> so that logs go nowhere. Neither has anything to do
+                with the pixel. The ground truth is the <strong>Network</strong> tab: tick
+                <strong>Preserve log</strong>, filter for <code>collect</code>, then exercise the
+                control. A request to <code>&hellip;/pixel-ingest/collect</code> whose payload contains
+                <code>cart.add</code> or <code>cart.remove</code> means the event fired and was sent,
+                whatever the console shows. If you see only <code>page.viewed</code> and
+                <code>presence.heartbeat</code> and no cart event on <em>any</em> surface, that is not a
+                coverage gap and manual binding will not fix it &mdash; please report it to IdealData
+                instead of instrumenting your theme.
+            </p>
+            <p class="idealdata-snippet-note">
                 Auto-capture covers standard flows on Hyvä and Luma out of the box — manual binding is
                 only for the gaps this procedure surfaces (a custom theme that bypasses the cart
                 section, a checkout that changes the cart without a page or section update).
