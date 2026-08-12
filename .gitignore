@@ -1,0 +1,16 @@
+# Composer / PHPCS tooling installed for local linting (never committed, never shipped).
+/vendor/
+composer.lock
+.phpcs-cache
+phpcs.xml
+.phpunit.result.cache
+
+# Build output (marketplace zips are built from idealdata3-adobecommerce/scripts).
+/dist/
+*.zip
+
+# Editor / OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

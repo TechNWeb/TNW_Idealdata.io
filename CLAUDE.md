@@ -23,7 +23,22 @@ connector: it exposes authenticated REST endpoints the connector calls, and host
   `getMockBuilder(...)->disableOriginalConstructor()`. No module-local `phpunit.xml`
   (relies on the host Magento's config).
 - **Versioning:** bump BOTH `etc/module.xml` `setup_version` and `composer.json`
-  `version` together on a shippable change (and the README install line). Current: **1.15**.
+  `version` together on a shippable change (and the README install line). Current: **1.17.0**.
+  **3-part semver since 1.17.0** (was 2-part: `1.16`); tags are `vX.Y.Z` and Packagist
+  publishes from the tag. Releasing = tag + push; the Packagist webhook does the rest.
+  ⚠️ `composer validate` warns that `version` is redundant for a Packagist package —
+  **keep it anyway**, the Adobe Commerce Marketplace requires it. Do not "fix" that warning.
+- **Marketplace:** this module is also published to the Adobe Commerce Marketplace,
+  wrapped in a `tnw/idealdata` **metapackage** whose manifest and build tooling live in
+  `../idealdata3-adobecommerce/plugin/` + `scripts/build-metapackage-zip.sh` (NOT here).
+  The metapackage pins this module's version **exactly**, so a release here must be
+  tagged and live on Packagist *before* the metapackage is built — the build script
+  refuses otherwise. Full contract:
+  `../idealdata3-docs/_docs/adobe-commerce-marketplace-submission.md`.
+- **Lint:** `phpcs.xml.dist` configures the `Magento2` coding standard Adobe runs during
+  Marketplace technical review. The standard is deliberately NOT a `require-dev` (that
+  would ship dev tooling in the manifest merchants install) — install it globally, see
+  the file header. Run `phpcs` before any Marketplace submission.
 - Validate edits locally with `php -l` (all PHP) + a `DOMDocument` load per XML file.
   Storefront JS: `node --check` + the module's own dependency-free suite,
   `node Test/Js/cart-tracking.test.js` (Node `vm`; do NOT add a JS build chain).
