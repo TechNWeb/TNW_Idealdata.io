@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+    PHP_CodeSniffer ruleset for TNW_Idealdata.
+
+    Adobe runs the `Magento2` coding standard over every package submitted to the
+    Commerce Marketplace as part of the Extension Quality Program. Running the same
+    standard locally is the only way to see those findings before a submission
+    burns a review cycle.
+
+    The standard is NOT a dependency of this module — adding it to composer.json
+    would put dev tooling into the manifest that ships to merchants. Install it
+    globally instead:
+
+        composer global require magento/magento-coding-standard
+        phpcs --config-set installed_paths ~/.composer/vendor/magento/magento-coding-standard
+
+    Then, from the module root:
+
+        phpcs                 # report against this ruleset
+        phpcbf                # auto-fix what can be fixed safely
+
+    Severity note: the Magento2 standard emits both errors and warnings. EQP
+    rejects on errors; warnings are advisory but reviewers do read them.
+-->
+<ruleset name="TNW_Idealdata">
+    <description>Magento 2 coding standard (EQP) for the TNW_Idealdata module.</description>
+
+    <!-- Scan the module tree by default so `phpcs` with no arguments does the right thing. -->
+    <file>.</file>
+
+    <!-- Never sniff dependencies or build output. -->
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/dist/*</exclude-pattern>
+
+    <!--
+        The Magento2 standard covers PHP, .phtml templates, XML config and JS.
+        Declaring the extensions explicitly keeps `phpcs` with no path argument
+        consistent with what EQP scans.
+    -->
+    <arg name="extensions" value="php,phtml,xml,js"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <rule ref="Magento2"/>
+</ruleset>
